@@ -4,6 +4,11 @@
 // `struct V2`, `b2Dot`, and so on, so they cannot share a translation unit. This header
 // pulls in neither, only plain floats and ints, and the reference lives in a separate
 // .cu.
+//
+// The scenarios are plain Box2D cases: a circle settling on a static edge, two
+// circles in contact, and a small pile of circles settling. Each body carries a
+// userData int (b2Body::m_userData) that the reference adapter maps to a shape
+// radius; the engine reads the radius directly through BODY(w,radius,s).
 #pragma once
 #include <cstdint>
 
@@ -20,7 +25,8 @@ struct SolverState {
     float xfPx[GBT_MAX_BODIES], xfPy[GBT_MAX_BODIES], xfQs[GBT_MAX_BODIES], xfQc[GBT_MAX_BODIES];
     float velX[GBT_MAX_BODIES], velY[GBT_MAX_BODIES], angVel[GBT_MAX_BODIES];
     float invMass[GBT_MAX_BODIES], invI[GBT_MAX_BODIES];
-    int   tier[GBT_MAX_BODIES], bodyType[GBT_MAX_BODIES];
+    float radius[GBT_MAX_BODIES];
+    int   userData[GBT_MAX_BODIES], bodyType[GBT_MAX_BODIES];
     float sleepTime[GBT_MAX_BODIES];
     unsigned char awake[GBT_MAX_BODIES], alive[GBT_MAX_BODIES];
     int   bodyCount;
@@ -41,7 +47,10 @@ struct SolverState {
     int   contactCount;
 };
 
-struct SeedBody { int tier; float x,y,vx,vy; };
+// One seed body for a scenario. sizeClass selects a circle radius from the
+// reference adapter's radius table; x,y is the initial position and vx,vy the
+// initial velocity.
+struct SeedBody { int sizeClass; float x,y,vx,vy; };
 
 // Implemented in gb_island_ref.cu (the Box2D 2.3.0 reference, in its own translation unit).
 extern "C" {

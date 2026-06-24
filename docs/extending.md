@@ -77,13 +77,12 @@ Joints add constraint rows that solve alongside contacts in `b2Island::Solve`.
 ## Growing the bounds
 
 Polygons and joints enlarge the per-world working set. The bounds are compile-time
-defines in `gb_pools.cuh` (`GB_MAX_BODIES`, `GB_MAX_CONTACTS`, `GB_MAX_PAIRS`).
-Raising them grows `WorldShared`. If the result exceeds the 48 KB default shared
-budget, use the 100 KB shared opt-in on sm_86 and later, or move cold per-world
-state (game scalars, infrequently touched fields) to global storage behind the
-accessors. The shared budget is the design constraint to track. Because every access
-goes through the accessors, moving a field between shared and global is a backend
-change that leaves every call site untouched.
+defines in `gb_pools.cuh` (`GB_MAX_BODIES`, `GB_MAX_CONTACTS`). Raising them grows
+`WorldShared`. If the result exceeds the 48 KB default shared budget, use the 100 KB
+shared opt-in on sm_86 and later, or move cold per-world state (infrequently touched
+fields) to global storage behind the accessors. The shared budget is the design
+constraint to track. Because every access goes through the accessors, moving a field
+between shared and global is a backend change that leaves every call site untouched.
 
 ## Checklist for a new module
 

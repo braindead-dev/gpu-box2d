@@ -74,14 +74,13 @@ verifiable while it is built, rather than validating only at the end.
 | contact solver | b2ContactSolver velocity + position iters | yes, serial sweep |
 | island | b2Island::Solve integrate / sleep + DFS order | yes |
 | ccd | b2TimeOfImpact / b2Distance (GJK) | yes |
-| game layer | reference merge / spawn / death / score | yes, game scalars exact |
 
 ## What is verified
 
 The following are green at 0 ULP against the CPU Box2D reference:
 
-- **Single-world physics.** A drop, a stack, and a settling pile are bit-identical over
-  hundreds of substeps, including the CCD path.
+- **Single-world physics.** A circle settling on a static edge, a stack of circles, and
+  a settling pile are bit-identical over hundreds of substeps, including the CCD path.
 - **Narrow-phase.** `b2CollideCircles`, `b2CollideEdgeAndCircle`, and the world
   manifold reproduce Box2D's manifolds and touching transitions exactly.
 - **Broad-phase.** `test/gb_broadphase_test.cu` produces the exact proxyId sequence and
@@ -90,32 +89,31 @@ The following are green at 0 ULP against the CPU Box2D reference:
   position iterations, the sleep decision, and the DFS island order at 0 ULP on host and
   device.
 - **CCD / TOI.** `test/gb_toi_test.cu` reproduces the GJK distance and the
-  `b2TimeOfImpact` result at 0 ULP on a fruit-wall continuous-collision scenario.
+  `b2TimeOfImpact` result at 0 ULP on a circle-edge continuous-collision sweep.
 - **The execution model.** The GPU device path is 0 ULP against the host path of the
   same source on every scenario, so the execution model adds no drift of its own.
 
-For the batched engine, the score distribution agrees with the CPU batch reference at a
-Kolmogorov-Smirnov p-value of 1.0, and queue state and observations are byte-exact. The
-game layer's merge, spawn, death, and score logic is exact per drop against the CPU
-reference.
+For a batched application, the example layer's output distribution agrees with its CPU
+batch reference at a Kolmogorov-Smirnov p-value of 1.0, with per-world application state
+byte-exact. That application logic lives outside the physics core; see
+[../examples/fruit_merge](../examples/fruit_merge).
 
 ## The dense-world float32 note
 
 Single isolated worlds and worlds with a handful of bodies are bit-identical. Worlds
-with a large connected island of densely packed fruits carry an irreducible per-substep
-float32 difference: a single contact or merge can flip one substep earlier than the CPU
-because of float32 rounding in the solve, which then forks the trajectory while staying
-bounded (no NaN, no blowup). The island body order, the contact solve order, and the
-constraint composition are byte-exact even for large islands, so the difference is float
+with a large, densely packed connected island carry an irreducible per-substep float32
+difference: a single contact can flip one substep earlier than the CPU because of
+float32 rounding in the solve, which then forks the trajectory while staying bounded (no
+NaN, no blowup). The island body order, the contact solve order, and the constraint
+composition are byte-exact even for large islands, so the difference is float
 sensitivity in the solve itself. The ordering is correct, and the residual is rounding.
 
 This is inherent to float32 in large connected islands and is the accepted standard for
 this class of engine. Brax and MJX make the same trade for the same reason. In this
 regime worlds match in distribution, which is what batch reinforcement learning over
 thousands of worlds requires, and the measured agreement is KS p=1.0 against the
-reference. Closing it for dense single worlds would need a higher-precision merge and
-contact trigger, which is outside the bit-identical-to-float32-Box2D scope this engine
-targets.
+reference. Closing it for dense single worlds would need a higher-precision contact
+solve, which is outside the bit-identical-to-float32-Box2D scope this engine targets.
 
 ## Running the gate
 

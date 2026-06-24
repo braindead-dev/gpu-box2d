@@ -24,6 +24,7 @@
 // This is the validated CPU game logic with arena field access rewritten onto the
 // accessor contract and the physics call routed through gb_world_step.
 #pragma once
+#include "fm_fields.cuh"            // inject the game's per-world fields into the core
 #include "gpu_box2d/gb_pools.cuh"
 #include "gpu_box2d/gb_math.cuh"
 #include "gpu_box2d/gb_world.cuh"   // gb_world_step(GBWorld&) - the frozen step

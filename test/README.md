@@ -36,7 +36,7 @@ translation unit. Build them with the reference source on the include path (see 
 build command at the top of each test file).
 
 - **`gb_toi_test.cu`** compares the GJK distance and `b2TimeOfImpact` result against
-  the Box2D 2.3.0 CCD reference on a fruit-wall continuous-collision scenario.
+  the Box2D 2.3.0 CCD reference on a circle-edge continuous-collision sweep.
   Validated, 0 ULP.
 - **`gb_island_test.cu`** with **`gb_island_ref.cu`** compares the contact solver and
   island assembly against `b2World::Solve`. `gb_test_iface.h` is the flat-POD bridge

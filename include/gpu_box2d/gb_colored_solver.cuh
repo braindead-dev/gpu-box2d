@@ -20,7 +20,7 @@
 // path at about 23K. Breaking the serial wall did not pay for the host it required.
 //
 // EXECUTION: one CUDA block per world. Block threads cooperate:
-//   - lane 0: DFS island assembly + greedy contact coloring + collide/merge bookkeeping
+//   - lane 0: DFS island assembly + greedy contact coloring + collide bookkeeping
 //   - all threads: parallel-by-color velocity and position iterations, parallel per-body
 //     integration and copy-back.
 // Build flags: nvcc --fmad=false -prec-div=true -prec-sqrt=true.

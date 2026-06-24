@@ -49,7 +49,8 @@ inline void stateToShared(const SolverState& a, WorldShared& s){
         s.xfPx[i]=a.xfPx[i]; s.xfPy[i]=a.xfPy[i]; s.xfQs[i]=a.xfQs[i]; s.xfQc[i]=a.xfQc[i];
         s.velX[i]=a.velX[i]; s.velY[i]=a.velY[i]; s.angVel[i]=a.angVel[i];
         s.invMass[i]=a.invMass[i]; s.invI[i]=a.invI[i];
-        s.tier[i]=a.tier[i]; s.bodyType[i]=a.bodyType[i];
+        s.userData[i]=a.userData[i]; s.bodyType[i]=a.bodyType[i];
+        s.radius[i]=a.radius[i];
         s.sleepTime[i]=a.sleepTime[i]; s.awake[i]=a.awake[i]; s.alive[i]=a.alive[i];
     }
     s.bodyCount=a.bodyCount;
@@ -148,22 +149,22 @@ int main(){
     printf("flags: --fmad=false -prec-div=true -prec-sqrt=true | reference TU = Box2D 2.3.0 b2World::Solve\n\n");
     int fails=0;
 
-    {   // s1: single-drop, one tier-2 fruit settling on the floor. 1-body island,
-        // fruit-wall contact, vel+pos sweeps, sleep fold.
+    {   // s1: one circle settling on the static ground edge. 1-body island,
+        // circle-edge contact, vel+pos sweeps, sleep fold.
         SeedBody s[] = {{2, 0.0f, 0.55f, 0.0f, 0.0f}};
         fails += runScenario("s1_single_drop", s, 1, 200);
     }
-    {   // s2: 2-body, two equal fruits stacked, touching each other + floor.
-        // multi-body island, fruit-fruit + fruit-wall, Gauss-Seidel read-after-write
-        // chain across contacts, all three folds.
+    {   // s2: two equal circles in contact, stacked on the ground. multi-body
+        // island, circle-circle + circle-edge, Gauss-Seidel read-after-write chain
+        // across contacts, all three folds.
         SeedBody s[] = {
             {2, 0.0f, 0.55f, 0.0f, 0.0f},
             {2, 0.0f, 1.50f, 0.0f, 0.0f},
         };
         fails += runScenario("s2_two_body", s, 2, 200);
     }
-    {   // s3: 5-body pile, cluster settling into a multi-contact island. Heaviest
-        // test of assembly order, 8 vel + 3 pos sweeps, minSeparation early-exit,
+    {   // s3: a 5-circle pile settling into a multi-contact island. Heaviest test
+        // of assembly order, 8 vel + 3 pos sweeps, minSeparation early-exit,
         // minSleepTime fold across 5 bodies.
         SeedBody s[] = {
             {2, -0.55f, 0.55f, 0.0f, 0.0f},

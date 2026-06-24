@@ -77,9 +77,9 @@ GB_HD inline void gbSyncTransform(GBWorld& w, int i){
 }
 #endif // GB_SYNC_TRANSFORM_PROVIDED
 
-// Circle fixture radius - the GENERAL core reads it via the FROZEN accessor
-// gbCircleRadius(w,s) == BODY(w,radius,s) (gb_pools.cuh), NEVER a game tier map.
-// Edge fixtures use GB_POLYGON_RADIUS. (See gb_pools.cuh::gbCircleRadius.)
+// Circle fixture radius - the core reads it via the accessor
+// gbCircleRadius(w,s) == BODY(w,radius,s) (gb_pools.cuh). Edge fixtures use
+// GB_POLYGON_RADIUS. (See gb_pools.cuh::gbCircleRadius.)
 
 // ============================================================================
 // b2ContactSolver - the SERIAL Gauss-Seidel phases (LANE 0 ONLY). Each operates on

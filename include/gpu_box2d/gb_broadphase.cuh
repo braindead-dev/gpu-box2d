@@ -11,7 +11,7 @@
 // Accessor usage:
 //   BODY(w, sweepCx, s)  circle body position (x)
 //   BODY(w, sweepCy, s)  circle body position (y)
-//   BODY(w, tier, s)     tier index (for radius lookup)
+//   BODY(w, radius, s)   circle shape radius
 //   EDGE(w, edgeAx, e) / edgeAy / edgeBx / edgeBy   ground edge endpoints
 #pragma once
 #include "gb_pools.cuh"   // GBWorld, accessor macros, GB_AABB_EXTENSION, etc.
@@ -458,7 +458,7 @@ GB_HD inline void gbBpUpdatePairs(GbBroadPhase& bp){
 // Shape AABB helpers using accessor macros (reads world state via BODY/EDGE).
 // These are used by the world step to build proxy AABBs for CreateProxy /
 // MoveProxy without reading raw WorldShared fields.
-// radius must be supplied by caller (e.g., tier_radius(BODY(w,tier,s))).
+// radius must be supplied by caller (e.g., gbCircleRadius(w, s)).
 // ---------------------------------------------------------------------------
 
 // Tight AABB of a circle body at slot s (reads position via BODY accessor).

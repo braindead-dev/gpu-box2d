@@ -6,7 +6,9 @@
 //
 // world_types.cuh / b2_step.cuh are the reference adapter headers: a thin CPU build of
 // Box2D 2.3.0's collide and solve over the same arena layout. Point your include path at
-// your Box2D 2.3.0 reference build (see test/README.md).
+// your Box2D 2.3.0 reference build (see test/README.md). The arena field names below
+// (g_ref.tier, tier_radius, the density constant) belong to that external adapter; this
+// file maps them onto the engine's general userData / radius fields when exporting.
 #include "world_types.cuh"
 #include "b2_step.cuh"          // collide + solve over the reference Box2D 2.3.0 build
 #include "gb_test_iface.h"
@@ -23,7 +25,10 @@ static void exportState(SolverState* o){
         o->xfPx[i]=g_ref.xfPx[i]; o->xfPy[i]=g_ref.xfPy[i]; o->xfQs[i]=g_ref.xfQs[i]; o->xfQc[i]=g_ref.xfQc[i];
         o->velX[i]=g_ref.velX[i]; o->velY[i]=g_ref.velY[i]; o->angVel[i]=g_ref.angVel[i];
         o->invMass[i]=g_ref.invMass[i]; o->invI[i]=g_ref.invI[i];
-        o->tier[i]=g_ref.tier[i]; o->bodyType[i]=g_ref.bodyType[i];
+        // g_ref.tier is the upstream reference arena's size index; map it to a radius
+        // and carry it as the engine's general userData / radius fields.
+        o->userData[i]=g_ref.tier[i]; o->bodyType[i]=g_ref.bodyType[i];
+        o->radius[i]=g_ref.tier[i]>=0 ? tier_radius(g_ref.tier[i]) : 0.0f;
         o->sleepTime[i]=g_ref.sleepTime[i]; o->awake[i]=g_ref.awake[i]; o->alive[i]=g_ref.alive[i];
     }
     o->bodyCount=g_ref.bodyCount;
@@ -55,7 +60,7 @@ extern "C" void ref_init(const SeedBody* seeds, int n){
     g_ref.edgeAx[2]= WALL_X_C; g_ref.edgeAy[2]=0; g_ref.edgeBx[2]= WALL_X_C; g_ref.edgeBy[2]=CONTAINER_H_C;
     int bc=1;
     for (int i=0;i<n;++i){
-        int s=bc++; int t=seeds[i].tier; float r=tier_radius(t);
+        int s=bc++; int t=seeds[i].sizeClass; float r=tier_radius(t);
         float mass=FRUIT_DENSITY*B2_PI*r*r; float I=mass*(0.5f*r*r);
         g_ref.bodyType[s]=2; g_ref.tier[s]=t;
         g_ref.invMass[s]=mass>0.0f?1.0f/mass:0.0f; g_ref.invI[s]=I>0.0f?1.0f/I:0.0f;

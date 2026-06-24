@@ -9,8 +9,9 @@
 //   Collision/b2Collision.cpp      (b2WorldManifold::Initialize, 1-point)
 //   Dynamics/b2Contact.cpp         (b2Contact::Update, touching flip, 1-point)
 //
-// Fruits are circles and walls are edges, so every manifold is 1-point. The 2-point
-// block path is never reached and is omitted, matching the validated source.
+// This module covers the circle and single-edge shapes, where every manifold is
+// 1-point. The 2-point block path (polygon contacts) is a separate extension; see
+// docs/extending.md.
 //
 // Build flags (FROZEN): nvcc --fmad=false -prec-div=true -prec-sqrt=true (mirrors
 // the CPU's -ffp-contract=off -mfpmath=sse). Changing these breaks bit-identicality.
@@ -19,7 +20,7 @@
 #include "gpu_box2d/gb_contact_types.cuh"
 
 // =========================== Narrow-phase ===================================
-// b2CollideCircles (b2CollideCircle.cpp:23). circle m_p == (0,0) for fruits.
+// b2CollideCircles (b2CollideCircle.cpp:23). circle m_p == (0,0).
 GB_HD inline void gbCollideCircles(GBManifold& m, float rA, Xf xfA, float rB, Xf xfB){
     m.pointCount = 0;
     V2 pA = b2MulTV(xfA, v2(0,0));
@@ -36,7 +37,7 @@ GB_HD inline void gbCollideCircles(GBManifold& m, float rA, Xf xfA, float rB, Xf
 }
 
 // b2CollideEdgeAndCircle (b2CollideEdge.cpp:27). Edge has no vertex0/vertex3
-// (single-edge walls), so the connectivity early-outs never trigger.
+// (single-segment edges), so the connectivity early-outs never trigger.
 GB_HD inline void gbCollideEdgeAndCircle(GBManifold& m, V2 A, V2 B, float edgeR,
                                          float circR, Xf xfA, Xf xfB){
     m.pointCount = 0;
@@ -126,13 +127,14 @@ GB_HD inline Xf gbBodyXf(GBWorld& w, int i){
 // `cEdge`, fixtureB = cBodyB's circle). Radii read via the general accessor
 // gbCircleRadius (BODY(w,radius,s)).
 //
-// The Begin/EndContact listener (the merge-pair store) is game logic. It reads
-// game-only fields like tier and stays out of the general core. This narrow-phase
-// only flips touching; the game layer reacts to the transition. gbContactUpdate
-// calls gbOnTouchBegin/gbOnTouchEnd, which the game layer overrides via
-// -DGB_GAME_TOUCH_HOOKS (default: no-op). The hook adds zero float ops to the
-// narrow-phase, so the 0-ULP manifold and touching result hold.
-#ifndef GB_GAME_TOUCH_HOOKS
+// CONTACT LISTENER HOOK. This is the generic b2ContactListener mechanism. On a
+// touching transition gbContactUpdate calls gbOnTouchBegin (begin-contact) or
+// gbOnTouchEnd (end-contact). The default definitions are no-ops; an application
+// overrides them by defining GB_CONTACT_LISTENER_HOOKS and supplying its own
+// gbOnTouchBegin / gbOnTouchEnd before this header is included. The hook carries
+// no game meaning in the core and adds zero float ops to the narrow-phase, so the
+// 0-ULP manifold and touching result hold.
+#ifndef GB_CONTACT_LISTENER_HOOKS
 GB_HD inline void gbOnTouchBegin(GBWorld&, int, int){}
 GB_HD inline void gbOnTouchEnd(GBWorld&, int, int){}
 #endif
@@ -147,7 +149,7 @@ GB_HD inline void gbContactUpdate(GBWorld& w, int ci){
         float rA = gbCircleRadius(w, bodyA), rB = gbCircleRadius(w, bodyB);
         gbCollideCircles(m, rA, gbBodyXf(w, bodyA), rB, gbBodyXf(w, bodyB));
     } else {
-        // edge-circle: fixtureA = ground edge, fixtureB = fruit circle
+        // edge-circle: fixtureA = ground edge, fixtureB = body's circle
         V2 A = v2(EDGE(w, edgeAx, edge), EDGE(w, edgeAy, edge));
         V2 B = v2(EDGE(w, edgeBx, edge), EDGE(w, edgeBy, edge));
         float circR = gbCircleRadius(w, bodyB);
@@ -168,7 +170,7 @@ GB_HD inline void gbContactUpdate(GBWorld& w, int ci){
         CONT(w, cNormalImpulse, ci) = 0.0f; CONT(w, cTangentImpulse, ci) = 0.0f;
     }
     CONT(w, cTouching, ci) = touching ? 1 : 0;
-    // b2Contact::Update: fire Begin/EndContact on touching transitions (game listener)
+    // b2Contact::Update: fire begin-contact / end-contact on touching transitions
     if (!wasTouching && touching)  gbOnTouchBegin(w, bodyA, bodyB);
     if ( wasTouching && !touching) gbOnTouchEnd(w, bodyA, bodyB);
 }

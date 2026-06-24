@@ -61,12 +61,13 @@ expands the same macro to a direct `w.sweepCx[s]`. Both backends compute the sam
 values in the same order. The macro changes addressing only. Keeping every module
 behind these accessors is what makes the memory layout a build-time choice.
 
-The field set is the frozen contract, defined as `WorldShared` in
-`include/gpu_box2d/gb_pools.cuh`: bodies, contacts, merge pairs, and scalars. The
-bounds are sized against measured peaks (the defaults are 65 bodies, 128 contacts, 48
-merge pairs), which keeps the per-world working set small enough that the SoA arrays
-stay bandwidth-friendly and the alternative shared-memory shell fits the 48 KB default
-block budget with headroom. sm_86 and later offer a 100 KB opt-in for larger bounds.
+The field set is the general physics contract, defined as `WorldShared` in
+`include/gpu_box2d/gb_pools.cuh`: bodies, contacts, and physics scalars. The defaults
+(65 bodies, 128 contacts) keep the per-world working set small enough that the SoA
+arrays stay bandwidth-friendly and the alternative shared-memory shell fits the 48 KB
+default block budget with headroom. sm_86 and later offer a 100 KB opt-in for larger
+bounds. An application adds its own per-world fields through `GB_WORLD_USER_FIELDS`
+without editing the core struct.
 
 ## The serial-in-order solver rule
 

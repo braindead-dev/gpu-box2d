@@ -29,26 +29,26 @@
 #include "gb_settings.cuh"
 #include "gb_math.cuh"
 
-// ---- per-world bounds (sized to measured peaks: 86 contacts / 34 bodies) -------
+// ---- per-world bounds ----------------------------------------------------------
+// Defaults sized for a small-island workload; override at compile time to fit a
+// denser scene. Larger bounds grow WorldShared (see the shared-budget note below).
 #ifndef GB_MAX_BODIES
-#define GB_MAX_BODIES   65          // 64 dynamic circles + 1 static ground (slot 0)
+#define GB_MAX_BODIES   65          // dynamic bodies + 1 static ground (slot 0)
 #endif
 #ifndef GB_MAX_CONTACTS
-#define GB_MAX_CONTACTS 128         // measured peak 86
+#define GB_MAX_CONTACTS 128
 #endif
-#ifndef GB_MAX_PAIRS
-#define GB_MAX_PAIRS    48
-#endif
-#define GB_N_EDGES      3
-#define GB_GROUND       0
+#define GB_N_EDGES      3           // static edge fixtures on the ground body
+#define GB_GROUND       0           // body slot 0 is the static ground
 
 // ============================================================================
 // WorldShared. The canonical per-world field set as one contiguous POD. The
 // block model holds one instance in shared memory per block. The SoA-global model
 // mirrors each field as a transposed global array (length NW*MAX, index
 // slot*NW+world). The field names below are the contract. Every module references
-// them through the accessor macros. Physics fields and game-layer fields share
-// this struct; game fields are marked and the physics core ignores them.
+// them through the accessor macros. This is the general physics field set; an
+// application adds its own per-world fields through GB_WORLD_USER_FIELDS (see the
+// extension hook at the end of the struct).
 // ============================================================================
 struct WorldShared {
     // bodies (b2Sweep + b2Transform + velocity + mass + flags). slot 0 = static ground.
@@ -60,10 +60,9 @@ struct WorldShared {
     float  xfQs[GB_MAX_BODIES], xfQc[GB_MAX_BODIES];          // m_xf.q (sin,cos)
     float  velX[GB_MAX_BODIES], velY[GB_MAX_BODIES], angVel[GB_MAX_BODIES];
     float  invMass[GB_MAX_BODIES], invI[GB_MAX_BODIES];
-    float  radius[GB_MAX_BODIES];   // circle-shape radius. The general core reads
-                                    // shape radius here; the game sets it at body
-                                    // creation from its own size table.
-    int    tier[GB_MAX_BODIES];     // GAME field (example: fruit tier). Physics ignores it.
+    float  radius[GB_MAX_BODIES];   // circle-shape radius (b2CircleShape::m_radius),
+                                    // read by the general core through gbCircleRadius.
+    int    userData[GB_MAX_BODIES]; // b2Body::m_userData. The core never reads it.
     int    bodyType[GB_MAX_BODIES];
     float  sleepTime[GB_MAX_BODIES];
     unsigned char awake[GB_MAX_BODIES];
@@ -84,17 +83,18 @@ struct WorldShared {
     int    cToiCount[GB_MAX_CONTACTS];
     unsigned char cToiFlag[GB_MAX_CONTACTS], cEnabled[GB_MAX_CONTACTS];
     int    contactCount;
-    // merge pairs (ContactListener-filled, insertion-ordered)
-    int    pairLo[GB_MAX_PAIRS], pairHi[GB_MAX_PAIRS], pairA[GB_MAX_PAIRS], pairB[GB_MAX_PAIRS];
-    int    pairCount;
     // physics scalars
     unsigned char stepComplete;
-    // game scalars (example layer). The physics core ignores these. They can move
-    // to global storage if shared-memory space gets tight.
-    int      score, drops, maxTier, goldapples, cur, nxt;
-    unsigned char dead;
-    unsigned long long rng;
-    float    age[GB_MAX_BODIES], outline[GB_MAX_BODIES];
+    // ---- application extension hook --------------------------------------
+    // An application injects its own per-world fields (arrays sized to the
+    // bounds, or scalars) by defining GB_WORLD_USER_FIELDS before including the
+    // core. The physics core never reads them. Fields injected here are visible
+    // to the BODY/CONT/EDGE/SCAL accessors by name, so an application layer
+    // reaches its own state through the same contract the physics uses. See
+    // examples/fruit_merge for a worked example.
+#ifdef GB_WORLD_USER_FIELDS
+    GB_WORLD_USER_FIELDS
+#endif
 };
 
 // ============================================================================
@@ -132,12 +132,13 @@ struct WorldPools {
   #define SCAL(w, field)     ((w).field)          // per-world scalar
 #endif
 
-// ---- general core shape accessor (game-agnostic) ----------------------------
-// A circle body's radius. The general core reads radius through this accessor.
-// The game layer sets BODY(w,radius,s) at body creation from its own size table.
+// ---- shape-radius accessor --------------------------------------------------
+// A circle body's radius (b2CircleShape::m_radius). The general core reads it
+// through this accessor. An application sets BODY(w,radius,s) at body creation.
 // Edge fixtures use GB_POLYGON_RADIUS.
 GB_HD inline float gbCircleRadius(GBWorld& w, int s){ return BODY(w, radius, s); }
 
 // Shared-memory budget: WorldShared must fit the per-block shared arena. The
 // 48 KB default holds it with headroom; sm_86 offers a 100 KB opt-in for larger
-// bounds. Game scalars can move to global if shared space gets tight.
+// bounds. Application fields injected through GB_WORLD_USER_FIELDS can move to
+// global storage behind the accessors if shared space gets tight.

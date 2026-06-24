@@ -1,0 +1,32 @@
+# Build output
+build/
+*.o
+*.obj
+*.so
+*.a
+*.exe
+*.out
+
+# Compiled test binaries (built from test/*.cu)
+test/gb_broadphase_test
+test/gb_toi_test
+test/gb_island_test
+test/gb_collision_test
+test/gb_math_test
+test/*_test
+!test/*_test.cu
+
+# CUDA / nvcc intermediates
+*.ptx
+*.cubin
+*.fatbin
+*.ii
+*.cudafe*
+*.module_id
+
+# Scratch and editor files
+*.tmp
+*.log
+.vscode/
+.idea/
+.DS_Store

@@ -9,7 +9,7 @@ project(gpu_box2d LANGUAGES CXX CUDA)
 # bit-identical across platforms. See docs/fidelity.md.
 # ----------------------------------------------------------------------------
 
-# Default to a modern data-center / Ampere target. Override with
+# Default to an Ampere data-center target. Override with
 # -DCMAKE_CUDA_ARCHITECTURES=86 (or your arch) at configure time.
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
   set(CMAKE_CUDA_ARCHITECTURES 86)
@@ -23,18 +23,31 @@ set(GPU_BOX2D_FROZEN_FLAGS --fmad=false -prec-div=true -prec-sqrt=true)
 
 add_library(gpu_box2d INTERFACE)
 target_include_directories(gpu_box2d INTERFACE
-  ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/examples)
 target_compile_options(gpu_box2d INTERFACE
   $<$<COMPILE_LANGUAGE:CUDA>:${GPU_BOX2D_FROZEN_FLAGS}>)
 target_compile_features(gpu_box2d INTERFACE cxx_std_14)
 
+# The production backend is thread-per-world on the transposed SoA layout, selected
+# with -DGB_SOA_GLOBAL. Consumers that want it set this option; the micro-tests build
+# against the default (contiguous per-world) backend because they drive a WorldShared
+# directly. See docs/architecture.md.
+option(GPU_BOX2D_SOA_GLOBAL "Use the thread-per-world SoA-global production backend" OFF)
+if(GPU_BOX2D_SOA_GLOBAL)
+  target_compile_definitions(gpu_box2d INTERFACE GB_SOA_GLOBAL)
+endif()
+
 # ----------------------------------------------------------------------------
 # Tests. Each module ships a 0-ULP micro-test. The broad-phase test is fully
-# self-contained (it embeds its own Box2D reference) and runs by default. The
-# CCD and solver/island tests need the Box2D 2.3.0 reference translation unit,
-# which is wired in once the narrow-phase and solver modules are assembled.
+# self-contained (it embeds its own Box2D 2.3.0 reference) and runs by default.
+# The CCD and solver/island tests compare against a CPU build of Box2D 2.3.0,
+# supplied on the include path; enable them with GPU_BOX2D_BUILD_REF_TESTS and
+# point GPU_BOX2D_REF_INCLUDE at your reference build. See test/README.md.
 # ----------------------------------------------------------------------------
-option(GPU_BOX2D_BUILD_TESTS "Build the 0-ULP micro-tests" ON)
+option(GPU_BOX2D_BUILD_TESTS "Build the self-contained 0-ULP micro-tests" ON)
+option(GPU_BOX2D_BUILD_REF_TESTS "Build the tests that need a Box2D 2.3.0 reference" OFF)
+set(GPU_BOX2D_REF_INCLUDE "" CACHE PATH "Include dir of the Box2D 2.3.0 reference build")
 
 if(GPU_BOX2D_BUILD_TESTS)
   enable_testing()
@@ -45,4 +58,20 @@ if(GPU_BOX2D_BUILD_TESTS)
   add_test(NAME gb_broadphase COMMAND gb_broadphase_test)
   set_tests_properties(gb_broadphase PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_broadphase")
+
+  if(GPU_BOX2D_BUILD_REF_TESTS AND GPU_BOX2D_REF_INCLUDE)
+    add_executable(gb_toi_test test/gb_toi_test.cu)
+    target_link_libraries(gb_toi_test PRIVATE gpu_box2d)
+    target_include_directories(gb_toi_test PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/test ${GPU_BOX2D_REF_INCLUDE})
+    add_test(NAME gb_toi COMMAND gb_toi_test)
+    set_tests_properties(gb_toi PROPERTIES PASS_REGULAR_EXPRESSION "PASS")
+
+    add_executable(gb_island_test test/gb_island_test.cu test/gb_island_ref.cu)
+    target_link_libraries(gb_island_test PRIVATE gpu_box2d)
+    target_include_directories(gb_island_test PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/test ${GPU_BOX2D_REF_INCLUDE})
+    add_test(NAME gb_island COMMAND gb_island_test)
+    set_tests_properties(gb_island PROPERTIES PASS_REGULAR_EXPRESSION "PASS")
+  endif()
 endif()

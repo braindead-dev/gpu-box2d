@@ -1,16 +1,18 @@
-// gb_broadphase_test.cu, micro-test for gb_broadphase. 0-ULP vs CPU Box2D 2.3.0.
+// gb_broadphase_test.cu, micro-test for gb_broadphase. 0-ULP versus CPU Box2D 2.3.0.
+// This test is self-contained: it embeds a reference copy of the Box2D 2.3.0
+// broad-phase logic (Ref-prefixed types) so it builds and runs from this repo alone.
 //
-// Two checks (both required for GREEN):
-//   (A) proxyId assignment, ground edges and N fruit proxies created in fixture
-//       order must get exactly the same proxyIds as b2_broadphase.cuh's BroadPhase.
-//       CPU reference: edges get 0,1,3; fruit i gets 5+2*i (verified in test_bp).
+// Two checks (both required to pass):
+//   (A) proxyId assignment. Ground edges and N circle proxies created in fixture
+//       order must get exactly the same proxyIds as the Box2D 2.3.0 BroadPhase.
+//       Reference: edges get 0,1,3; circle i gets 5+2*i.
 //
-//   (B) AddPair set + ORDER, build the same fixed scene in both the reference
-//       BroadPhase (b2_broadphase.cuh, reads raw structs) and the new GbBroadPhase
+//   (B) AddPair set and order. Build the same fixed scene in both the reference
+//       BroadPhase (Ref-prefixed, reads raw structs) and GbBroadPhase
 //       (gb_broadphase.cuh, reads via BODY/EDGE accessors on a WorldShared).
-//       Call UpdatePairs once after all proxies are created. Compare addCount,
-//       and then every (addA[k], addB[k]) pair in order, 0 ULP because these are
-//       integers, not floats; the comparison is exact identity.
+//       Call UpdatePairs once after all proxies are created, then compare addCount
+//       and every (addA[k], addB[k]) pair in order. The values are proxy ids, so the
+//       comparison is exact integer identity.
 //
 // Build (host-only, identical bits to CPU Box2D under frozen flags):
 //   nvcc -O2 --fmad=false -prec-div=true -prec-sqrt=true -arch=sm_86 \
@@ -21,18 +23,9 @@
 //   ./test/gb_broadphase_test
 //   Expected output: PASS gb_broadphase: proxyId exact, 0 ULP pair order
 //
-// The test is __host__-only (device compilation not needed for the 0-ULP comparison
-// since the algorithm is __host__ __device__; the host path is sufficient and keeps
-// build time minimal). The frozen flags ensure the float arithmetic is bit-identical
-// to the CPU Box2D reference.
-//
-// ---- includes ---------------------------------------------------------------
-// Reference: the faithful b2_broadphase.cuh (reads raw world_types WorldArena).
-// Subject:   gb_broadphase.cuh (reads via BODY/EDGE on WorldShared).
-// Both headers define overlapping type names, so we isolate them in separate
-// compilation units via a thin wrapper approach, here we include the subject
-// first (as the module under test) and replicate the reference logic inline
-// using renamed types to avoid clashes.
+// The test is host-only. The algorithm is __host__ __device__, so the host path is
+// sufficient for the bit-exact comparison and keeps build time minimal. The frozen
+// flags keep the float arithmetic bit-identical to the CPU Box2D reference.
 
 // Subject under test
 #include "gpu_box2d/gb_broadphase.cuh"    // GbBroadPhase, GbAABB, BODY, EDGE, ...
@@ -42,8 +35,8 @@
 #include <cstring>
 
 // ---------------------------------------------------------------------------
-// Game geometry constants (world_types.cuh values, copy only what we need so
-// we avoid pulling in the raw WorldArena / V2 redefinition from world_types.cuh)
+// Geometry constants for the test scene (copy only what we need so we avoid
+// pulling in any reference WorldArena / V2 redefinition).
 // ---------------------------------------------------------------------------
 #define TEST_WALL_X       3.75f
 #define TEST_CONTAINER_H  9.5f
@@ -51,7 +44,7 @@
 // b2_polygonRadius = 2 * b2_linearSlop = 2 * 0.005 = 0.01
 #define TEST_POLY_RADIUS  (2.0f * 0.005f)
 
-// Fruit radii by tier (tier_radius from world_types.cuh, tiers 0-10)
+// Circle radii by tier index, for the test scene (tiers 0-10)
 static float tier_radius_ref(int tier){
     static const float r[11] = {
         0.24f, 0.32f, 0.40f, 0.56f, 0.72f,
@@ -61,8 +54,8 @@ static float tier_radius_ref(int tier){
 }
 
 // ---------------------------------------------------------------------------
-// ULP diff helper (per MICROTEST_TEMPLATE.md, not needed for integer pairs,
-// but included for completeness so the pattern is present if float checks added)
+// ULP diff helper (per MICROTEST_TEMPLATE.md). The pair comparison is exact integer
+// identity; this helper is here for the pattern and for any future float check.
 // ---------------------------------------------------------------------------
 inline long ulpDiff(float a, float b){
     int ai = *(int*)&a, bi = *(int*)&b;
@@ -72,9 +65,10 @@ inline long ulpDiff(float a, float b){
 }
 
 // ---------------------------------------------------------------------------
-// Reference BroadPhase: replicate b2_broadphase.cuh logic with Ref-prefixed
-// types (AABB/BPNode/DynTree/BroadPhase) so we can link both in one TU.
-// The logic is a verbatim copy of b2_broadphase.cuh, that IS the reference.
+// Reference BroadPhase: the Box2D 2.3.0 broad-phase logic with Ref-prefixed types
+// (AABB/BPNode/DynTree/BroadPhase) so both can link in one translation unit. This
+// is a faithful copy of the Box2D 2.3.0 b2DynamicTree and b2BroadPhase, and it is
+// the reference the subject is compared against.
 // ---------------------------------------------------------------------------
 #define REF_NULL  (-1)
 #define REF_NCAP  256

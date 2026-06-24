@@ -8,13 +8,17 @@
 // The physics core reads and writes world state through FIELD MACROS, e.g.
 // `BODY(w, sweepCx, s)`. A macro layer maps that to the right address for the
 // active backend:
-//   Block-per-world (DEFAULT): GBWorld == WorldShared, a contiguous POD that
-//           lives in shared memory per block. `BODY(w, sweepCx, s)` is a direct
-//           shared-memory access `w.sweepCx[s]`.
-//   Thread-per-world SoA-global (-DGB_SOA_GLOBAL): GBWorld is a thin handle
-//           {WorldPools* p; int world;} and `BODY(w, sweepCx, s)` expands to a
-//           transposed global access `p->sweepCx[s*NW + world]` so a warp's 32
-//           lanes read 32 consecutive addresses (coalesced lane=world).
+//   Thread-per-world SoA-global (-DGB_SOA_GLOBAL, the production default): GBWorld
+//           is a thin handle {WorldPoolsSoA* p; int world;} and `BODY(w, sweepCx, s)`
+//           expands to a transposed global access `p->sweepCx[s*NW + world]` so a
+//           warp's 32 lanes (consecutive worlds) read 32 consecutive addresses
+//           (coalesced lane=world). One CUDA thread runs one world's full step.
+//           This is the measured high-throughput path (see docs/performance.md).
+//   Block-per-world (default when GB_SOA_GLOBAL is not set): GBWorld == WorldShared,
+//           a contiguous POD that lives in shared memory per block. `BODY(w, sweepCx,
+//           s)` is a direct shared-memory access `w.sweepCx[s]`. This path is kept
+//           as a documented alternative; it runs slower because the serial
+//           Gauss-Seidel solver idles most of the block's lanes.
 // Both backends are bit-identical: the macro changes ADDRESSING only, never the
 // value computed or the order it is computed in.
 //
@@ -94,16 +98,16 @@ struct WorldShared {
 };
 
 // ============================================================================
-// WorldPools. Persistent global batch state. The launcher allocates it; the
-// physics core never calls malloc. The default backend stores an array of
+// WorldPools. Persistent global batch state for the block-per-world backend. The
+// launcher allocates it; the physics core never calls malloc. It stores an array of
 // WorldShared, one per world, which the block-per-world kernel loads to shared
-// memory. The SoA-global backend mirrors each field as a transposed global array
-// behind the same accessor macros, so swapping backends changes storage, not
-// call sites.
+// memory. The production SoA-global backend uses WorldPoolsSoA (gb_soa_backend.cuh),
+// which mirrors each field as a transposed global array behind the same accessor
+// macros, so swapping backends changes storage rather than call sites.
 // ============================================================================
 struct WorldPools {
     int          NW;
-    WorldShared* world;      // [NW] persistent per-world state (block model loads to shared)
+    WorldShared* world;      // [NW] persistent per-world state
 };
 
 // ============================================================================
@@ -111,13 +115,14 @@ struct WorldPools {
 // the memory backend can swap. GBWorld is the per-world handle the core receives.
 // ============================================================================
 #ifdef GB_SOA_GLOBAL
-  // Thread-per-world SoA-global handle. Index transposed arrays at slot*NW+world.
-  // Reserved: this backend is added by the SoA migration; build the default
-  // (block/shared) path first.
-  struct GBWorld { WorldShared* base; int world; int NW; };
-  #error "GB_SOA_GLOBAL backend is not populated yet; build the default (block) path."
+  // Production path. GBWorld is a thin handle {WorldPoolsSoA* p; int world;} and the
+  // accessor macros index transposed global arrays at slot*NW+world (coalesced
+  // lane=world). Defined in gb_soa_backend.cuh, which provides WorldPoolsSoA, GBWorld,
+  // and the BODY/CONT/EDGE/SCAL macros with the same field names as WorldShared, so
+  // physics call sites are unchanged.
+  #include "gb_soa_backend.cuh"
 #else
-  // DEFAULT: GBWorld is the WorldShared (shared-resident in the block model).
+  // Alternative path. GBWorld is the WorldShared (shared-resident in the block model).
   typedef WorldShared GBWorld;
   // Field accessors. Direct here, but routed through macros so the SoA backend
   // can override addressing without touching any physics call site.

@@ -1,8 +1,9 @@
-// gb_test_iface.h, flat POD interface between the Solver and island micro-test (gb_* type
-// universe: WorldShared, gb_math V2) and the CPU Box2D reference (b2_* type
-// universe: WorldArena, b2_device V2). The two universes both define `struct V2`,
-// `b2Dot`, etc., so they CANNOT share a translation unit. This header pulls in
-// NEITHER, only plain floats/ints, and the reference lives in a separate .cu.
+// gb_test_iface.h, flat POD interface between the solver and island micro-test (the
+// engine type universe: WorldShared, gb_math V2) and the CPU Box2D reference (the
+// reference type universe: WorldArena and its own V2). Both universes define their own
+// `struct V2`, `b2Dot`, and so on, so they cannot share a translation unit. This header
+// pulls in neither, only plain floats and ints, and the reference lives in a separate
+// .cu.
 #pragma once
 #include <cstdint>
 
@@ -42,12 +43,12 @@ struct SolverState {
 
 struct SeedBody { int tier; float x,y,vx,vy; };
 
-// Implemented in gb_island_ref.cu (Box2D 2.3.0 reference, its OWN translation unit).
+// Implemented in gb_island_ref.cu (the Box2D 2.3.0 reference, in its own translation unit).
 extern "C" {
-    // initialize the persistent golden reference arena with these seeds.
+    // initialize the persistent reference arena with these seeds.
     void ref_init(const SeedBody* seeds, int n);
-    // run the REFERENCE collide on the golden arena; export post-collide pre-solve state.
+    // run the reference collide on the reference arena; export post-collide pre-solve state.
     void ref_collide(SolverState* out);
-    // run the REFERENCE worldSolve on the golden arena; export solved state.
+    // run the reference worldSolve on the reference arena; export solved state.
     void ref_solve(SolverState* out);
 }

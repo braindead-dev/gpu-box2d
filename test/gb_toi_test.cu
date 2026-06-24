@@ -1,27 +1,23 @@
-// gb_toi_test.cu, micro-test for gb_toi. 0-ULP vs CPU Box2D 2.3.0 (b2_toi.cuh).
-// Scenario: tier-0 circle (r=0.25) falling toward the floor edge at y=0.
-// The CPU reference is the b2_toi.cuh path; the GPU path is gb_toi.cuh.
+// gb_toi_test.cu, micro-test for gb_toi. 0-ULP versus the CPU Box2D 2.3.0 CCD path.
+// Scenario: a small circle (r=0.25) falling toward the floor edge at y=0.
+// The reference is a CPU build of Box2D 2.3.0's CCD; the GPU path is gb_toi.cuh.
 // Both run on the same fixed input. Bit-identical math under --fmad=false.
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
 #include <cassert>
 
-// ---- pull in both implementations -------------------------------------------
-// Reference: original b2_toi.cuh (via the legacy headers it includes)
-// We need b2_device.cuh -> world_types.cuh chain for the reference.
-// Include gb_toi.cuh first (it uses GB_ names), then the reference.
-
-// This test compares against the Box2D 2.3.0 CCD reference. The reference header is
-// supplied when the narrow-phase and solver modules are assembled (see test/README.md).
+// This test compares against the Box2D 2.3.0 CCD reference. Point your include path at
+// your Box2D 2.3.0 reference build (see test/README.md). The reference header is pulled
+// into its own namespace so its types do not collide with the engine's GB_ types.
 // Build with: nvcc -O2 --fmad=false -prec-div=true -prec-sqrt=true -arch=sm_86
 //             -Iinclude -Itest -I<box2d-reference-dir>
 //             test/gb_toi_test.cu -o test/gb_toi_test
 
 #include "gpu_box2d/gb_toi.cuh"   // the engine's CCD path (GB_ names)
 
-// Include the Box2D 2.3.0 reference CCD path in its own namespace to avoid symbol
-// collisions with the engine's GB_ type universe.
+// The Box2D 2.3.0 reference CCD path, in its own namespace to avoid symbol collisions
+// with the engine's GB_ type universe.
 namespace ref {
 #include "b2_toi.cuh"
 }
@@ -79,11 +75,12 @@ int main(){
     // ---- Define the exact scenario ------------------------------------------
     // Floor edge: from (-3.75, 0) to (3.75, 0), polygon radius = 0.01
     float eAx=-3.75f, eAy=0.0f, eBx=3.75f, eBy=0.0f;
-    // Tier-0 circle (r=0.25): starts at (0, 0.5), moving to (0, -0.1) in one step.
-    // This guarantees CCD fires (it would tunnel if not caught by TOI).
+    // Circle (r=0.25): starts at (0, 0.5), moving to (0, -0.1) in one step.
+    // This guarantees CCD fires; the circle would tunnel through the floor if the TOI
+    // pass did not catch it.
     float cx0=0.0f, cy0=0.5f, cx1=0.0f, cy1=-0.1f;
 
-    // ---- CPU reference: run b2_toi.cuh path ---------------------------------
+    // ---- CPU reference: run the Box2D 2.3.0 CCD path ------------------------
     // Build reference proxies
     ref::DProxy refPA, refPB;
     refPA.v[0] = ref::v2(eAx, eAy); refPA.v[1] = ref::v2(eBx, eBy);

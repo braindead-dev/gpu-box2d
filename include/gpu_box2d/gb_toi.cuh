@@ -93,6 +93,10 @@ GB_HD inline void gbWriteSweepAdvance(GBWorld& w, int i, const GBSweep& s){
 }
 
 // SynchronizeTransform: xf.q = Rot(sweepA); xf.p = sweepC (localCenter==0).
+// The contact solver defines an identical helper. Guarded so the two compose in one
+// translation unit: whichever header is included first defines it, the other yields.
+#ifndef GB_SYNC_TRANSFORM_PROVIDED
+#define GB_SYNC_TRANSFORM_PROVIDED 1
 GB_HD inline void gbSyncTransform(GBWorld& w, int i){
     Rot q = rotSet(BODY(w,sweepA,i));
     BODY(w,xfQs,i) = q.s;
@@ -100,6 +104,7 @@ GB_HD inline void gbSyncTransform(GBWorld& w, int i){
     BODY(w,xfPx,i) = BODY(w,sweepCx,i);
     BODY(w,xfPy,i) = BODY(w,sweepCy,i);
 }
+#endif
 
 // ---------------------------------------------------------------------------
 // GJK distance (faithful b2Distance). All math byte-identical to the Box2D 2.3.0 CCD path.

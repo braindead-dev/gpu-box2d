@@ -1,28 +1,27 @@
-// gb_island_test.cu. Solver and island micro-test. Proves gb_contact_solver.cuh + gb_island.cuh
-// (the re-hosted b2ContactSolver + b2Island::Solve + b2World::Solve) match the CPU
-// Box2D 2.3.0 reference solver to 0 ULP on multi-body scenarios.
+// gb_island_test.cu. Solver and island micro-test. It proves gb_contact_solver.cuh and
+// gb_island.cuh (the ported b2ContactSolver + b2Island::Solve + b2World::Solve) match
+// the CPU Box2D 2.3.0 reference solver to 0 ULP on multi-body scenarios.
 //
-// REFERENCE = Box2D 2.3.0 b2World::Solve, the instrumented 0-ULP port. It lives in
-// gb_island_ref.cu, a separate translation unit, because the reference's type
-// universe clashes with the engine's gb_* type universe. The test talks to it over
-// the flat-POD gb_test_iface.h. The engine code (gbWorldSolve) runs on a WorldShared
-// (the gb_pools layout) through the accessor macros, on host and on the device
-// block-per-world shell.
+// The reference is Box2D 2.3.0 b2World::Solve. It lives in gb_island_ref.cu, a separate
+// translation unit, because the reference type universe and the engine's gb_* types
+// cannot coexist in one TU. The test talks to it over the flat-POD gb_test_iface.h. The
+// engine code (gbWorldSolve) runs on a WorldShared (the gb_pools layout) through the
+// accessor macros, on the host and on one device thread (the device-versus-host control).
 //
-// METHOD (isolates the solver): each substep,
-//   1) ref_collide(): reference collide on the golden arena (identical input),
+// Method (isolates the solver). Each substep:
+//   1) ref_collide(): reference collide on the reference arena (identical input),
 //      export the post-collide, pre-solve state,
 //   2) load that state into a fresh WorldShared,
-//   3) run gbWorldSolve on it on HOST and on the DEVICE block shell,
-//   4) ref_solve(): reference worldSolve advances the golden arena, export solved truth,
-//   5) diff every body+contact OUTPUT field: ref vs shared-host vs shared-device.
-// Identical solver inputs every substep over a long settle => exercises island
-// assembly (descending seed + descending incident contact), the 8 vel + 3 pos
-// Gauss-Seidel sweeps, and ALL THREE float folds (vel-accum, minSeparation,
-// minSleepTime) on single-drop / 2-body / 5-body pile.
+//   3) run gbWorldSolve on it on the host and on one device thread,
+//   4) ref_solve(): reference worldSolve advances the reference arena, export solved truth,
+//   5) diff every body and contact output field: reference vs host vs device.
+// Identical solver inputs every substep over a long settle exercise island assembly
+// (descending seed and descending incident contact), the 8 velocity and 3 position
+// Gauss-Seidel sweeps, and all three float folds (velocity accumulation, minSeparation,
+// minSleepTime) on the drop, two-body, and five-body pile.
 //
-// Build (frozen flags), two translation units. gb_island_ref.cu needs the Box2D
-// 2.3.0 reference headers (see test/README.md):
+// Build (frozen flags), two translation units. gb_island_ref.cu needs your Box2D 2.3.0
+// reference build on the include path (see test/README.md):
 //   nvcc -O2 --fmad=false -prec-div=true -prec-sqrt=true -arch=sm_86 \
 //        -Iinclude -Itest -I<box2d-reference-dir> \
 //        test/gb_island_test.cu test/gb_island_ref.cu -o test/gb_island_test
@@ -99,19 +98,12 @@ inline DiffStat diffSolved(const SolverState& a, const WorldShared& s){
     return d;
 }
 
-// ---- device entry: run gbWorldSolve through the block-per-world shared-mem shell ---
-// (serial spine on lane 0, the execution model from gb_world.cuh).
-__global__ void kSolveBlock(WorldShared* g){
-    extern __shared__ unsigned char smem[];
-    WorldShared& w = *reinterpret_cast<WorldShared*>(smem);
-    int* d = reinterpret_cast<int*>(&w);
-    int* sg = reinterpret_cast<int*>(g);
-    const int n = (int)(sizeof(WorldShared)/sizeof(int));
-    for (int i=threadIdx.x;i<n;i+=blockDim.x) d[i]=sg[i];
-    __syncthreads();
-    if (threadIdx.x==0) gbWorldSolve(w);     // SERIAL spine on lane 0
-    __syncthreads();
-    for (int i=threadIdx.x;i<n;i+=blockDim.x) sg[i]=d[i];
+// ---- device entry: run gbWorldSolve on one device thread (device-vs-host control). --
+// The solver is serial, so a single device thread reproduces the host result exactly.
+// This isolates the floating-point environment: a 0-ULP device-vs-host result means the
+// GPU adds no drift of its own.
+__global__ void kSolveDevice(WorldShared* g){
+    if (threadIdx.x == 0 && blockIdx.x == 0) gbWorldSolve(*g);
 }
 
 int runScenario(const char* name, const SeedBody* seeds, int N, int nsub){
@@ -126,9 +118,9 @@ int runScenario(const char* name, const SeedBody* seeds, int N, int nsub){
         WorldShared sh;   stateToShared(pre, sh);
         // host solve
         WorldShared shHost = sh; gbWorldSolve(shHost);
-        // device solve (block shell, lane-0 serial spine)
+        // device solve (one device thread; device-vs-host control)
         cudaMemcpy(dW, &sh, sizeof(WorldShared), cudaMemcpyHostToDevice);
-        kSolveBlock<<<1,128,(int)sizeof(WorldShared)>>>(dW);
+        kSolveDevice<<<1,1>>>(dW);
         cudaError_t e=cudaDeviceSynchronize();
         if(e!=cudaSuccess){ fprintf(stderr,"[%s] CUDA ERR sub=%d: %s\n",name,sub,cudaGetErrorString(e)); cudaFree(dW); return 1; }
         WorldShared shDev; cudaMemcpy(&shDev, dW, sizeof(WorldShared), cudaMemcpyDeviceToHost);
@@ -152,7 +144,7 @@ int runScenario(const char* name, const SeedBody* seeds, int N, int nsub){
 }
 
 int main(){
-    printf("Solver and island micro-test: gb_contact_solver.cuh + gb_island.cuh vs CPU Box2D 2.3.0 (b2_step::worldSolve)\n");
+    printf("Solver and island micro-test: gb_contact_solver.cuh + gb_island.cuh vs CPU Box2D 2.3.0 (b2World::Solve)\n");
     printf("flags: --fmad=false -prec-div=true -prec-sqrt=true | reference TU = Box2D 2.3.0 b2World::Solve\n\n");
     int fails=0;
 
@@ -183,7 +175,7 @@ int main(){
         fails += runScenario("s3_five_pile", s, 5, 300);
     }
 
-    printf("\n%s: solver/island re-host is %s vs CPU Box2D 2.3.0 on multi-body scenarios.\n",
+    printf("\n%s: the solver and island are %s vs CPU Box2D 2.3.0 on multi-body scenarios.\n",
            fails? "FAIL":"PASS", fails? "DIVERGENT":"0-ULP IDENTICAL");
     return fails?1:0;
 }

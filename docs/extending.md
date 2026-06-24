@@ -12,11 +12,11 @@ Before any extension, two constraints hold for every line of new code.
    `BODY` / `CONT` / `EDGE` / `SCAL`, never raw `w.field[slot]`. This is what keeps
    the memory backend swappable. A module that reaches around the accessors breaks
    the SoA-global backend silently.
-2. **Match Box2D's order, not just its math.** The result is the algorithm and the
-   evaluation order together. A new manifold, solver path, or assembly step must
-   visit elements in the same order Box2D 2.3.0 does, and any running fold stays
-   serial on lane 0 (see [architecture.md](architecture.md)). Reordering changes the
-   floats even when the math is right.
+2. **Match Box2D's evaluation order along with its math.** The result is the
+   algorithm and the evaluation order together. A new manifold, solver path, or
+   assembly step must visit elements in the same order Box2D 2.3.0 does, and any
+   running fold stays serial and in order (see [architecture.md](architecture.md)).
+   Reordering changes the floats even when the math is right.
 
 Every extension ships with a 0-ULP micro-test against the Box2D 2.3.0 reference
 before it joins the assembled step. The template is in `test/MICROTEST_TEMPLATE.md`.
@@ -45,14 +45,14 @@ Polygons add a shape type, narrow-phase functions, and a mass formula.
 Circles produce one contact point. Polygons produce up to two, and Box2D solves a
 two-point manifold with a block solver that handles both points together when it can.
 
-- **Constraint.** Extend `GbConstraint` in `gb_contact_solver.cuh` to carry two
+- **Constraint.** Extend `GBConstraint` in `gb_contact_types.cuh` to carry two
   points. The fused velocity and position fields become arrays of two.
 - **Block solve.** Port `b2ContactSolver::SolveVelocityConstraints`'s two-point block
   path. It attempts a 2x2 solve of both normal impulses and falls back to two
   sequential single-point solves through a fixed cascade of cases. Reproduce the
   cascade in order; the fallback branch taken is part of the result.
 - **Order.** The two points within a contact solve in Box2D's order, and contacts
-  still solve in island order. The serial-on-lane-0 rule covers both.
+  still solve in island order. The serial-in-order solver rule covers both.
 - **Test.** A box resting on the ground exercises the two-point block solver
   directly. Compare every body's post-solve kinematics and both warm-start impulses
   at 0 ULP.

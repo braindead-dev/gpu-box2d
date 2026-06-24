@@ -1,14 +1,18 @@
-// gb_island_ref.cu. CPU Box2D 2.3.0 REFERENCE for the Solver and island micro-test. Its OWN
-// translation unit (the only one that includes the Box2D 2.3.0 reference headers), so the
-// b2_* type universe never collides with the gb_* universe in the test TU. Exposes a
-// flat-POD interface (gb_test_iface.h). The golden WorldArena persists across substeps
-// so warm-start impulses carry exactly as the real engine.
+// gb_island_ref.cu. CPU Box2D 2.3.0 reference for the solver and island micro-test, in
+// its own translation unit (the only one that includes the Box2D 2.3.0 reference
+// headers), so the reference type universe stays separate from the engine's gb_* types
+// in the test TU. It exposes a flat-POD interface (gb_test_iface.h). The reference world
+// persists across substeps so warm-start impulses carry exactly as the engine does.
+//
+// world_types.cuh / b2_step.cuh are the reference adapter headers: a thin CPU build of
+// Box2D 2.3.0's collide and solve over the same arena layout. Point your include path at
+// your Box2D 2.3.0 reference build (see test/README.md).
 #include "world_types.cuh"
-#include "b2_step.cuh"          // collidePhase + worldSolve = the 0-ULP Box2D reference
+#include "b2_step.cuh"          // collide + solve over the reference Box2D 2.3.0 build
 #include "gb_test_iface.h"
 #include <cstring>
 
-static WorldArena g_ref;        // persistent golden reference arena
+static WorldArena g_ref;        // persistent reference arena
 
 static void exportState(SolverState* o){
     memset(o, 0, sizeof(SolverState));
@@ -70,6 +74,6 @@ extern "C" void ref_collide(SolverState* out){
 }
 
 extern "C" void ref_solve(SolverState* out){
-    worldSolve(g_ref);          // THE REFERENCE solver (b2Island/b2ContactSolver)
+    worldSolve(g_ref);          // the reference solver (b2Island / b2ContactSolver)
     exportState(out);           // solved ground truth
 }

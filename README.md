@@ -23,36 +23,26 @@ through a contact hook.
 
 ## Design
 
-Four decisions define the engine. The first three are covered here; the fourth, the
+Three decisions define the engine. The first two are covered here; the third, the
 fidelity guarantee, has its own section.
 
-**Block-per-world.** One CUDA block simulates one world. The block's threads
-cooperate on that world's work: a thread per body for integration, a thread per
-contact for narrow-phase, a block reduction for sleep. This is how Brax and MJX think
-about per-environment parallelism, applied to Box2D. A world is the unit of
-parallelism across the grid; the bodies and contacts inside it are the unit of
-parallelism inside a block.
+**Thread-per-world execution.** One GPU thread simulates one world. A single kernel
+launch steps every world in the batch. This is the production path, and it wins for a
+structural reason: Box2D's contact solver is serial Gauss-Seidel and is the dominant
+cost of a step, so the work inside one world resists parallelizing across threads
+while preserving the floats (see the fidelity section). Giving each world its own
+thread keeps every lane busy on independent worlds, which is where the parallelism
+lives. Two alternative execution models were built and measured and came in slower;
+[docs/performance.md](docs/performance.md) documents them as findings.
 
-**Shared-memory arena.** Each world's working set lives in shared memory for its
-step. The block loads the world's state from global memory at block start, runs the
-step against the shared copy, and stores it back. Shared memory is far faster than
-the uncoalesced global access a thread-per-world layout produces, and it is where the
-solver scratch lives, so the heavy solver reads shared memory rather than thrashing
-local memory. Physics code reaches state through four accessor macros
-(`BODY` / `CONT` / `EDGE` / `SCAL`), so the memory backend can change without
-touching a single call site.
-
-**Faithful sequential-impulse solver.** Box2D's contact solver is sequential
-Gauss-Seidel. Each contact reads the body velocities as mutated by the previous
-contact, in a fixed order. That read-after-write chain is the result, and the
-per-contact clamps are nonlinear, so any reordered sweep produces different floats.
-The solver spine therefore stays serial and in order on one lane, while the
-embarrassingly-parallel phases (broad-phase, narrow-phase, integration, sleep) run
-across the block. Three running float folds (the velocity accumulation, the
-`minSeparation` fold, and the `minSleepTime` fold) also stay serial, because float
-addition is not associative under the frozen flags and a parallel reduction would
-change the bits. This is the single rule most easily broken by an optimization, and
-it is documented in [docs/architecture.md](docs/architecture.md).
+**SoA lane-equals-world memory layout.** Per-world state is stored as transposed
+structure-of-arrays, indexed `field[slot*NW + world]`, so a warp's 32 lanes (32
+consecutive worlds) read 32 consecutive addresses in one coalesced transaction
+instead of each lane striding a full per-world footprint. Physics code reaches state
+through four accessor macros (`BODY` / `CONT` / `EDGE` / `SCAL`), so the memory
+backend is a build-time choice that leaves every call site untouched. The contiguous
+per-world layout for the alternative block-per-world shell sits behind the same
+macros.
 
 ## The fidelity guarantee
 
@@ -73,47 +63,77 @@ order, the same CCD path. Nothing is approximated.
 
 A CPU Box2D built with `-ffp-contract=off -mfpmath=sse` rounds every operation to
 IEEE single precision with no fusion. These flags put the GPU in the same state, down
-to the transcendentals. They are not a tuning knob. Relaxing any of them breaks the
-bit match, so they are baked into the build target and the gate.
+to the transcendentals. They are a fidelity contract, baked into the build target and
+the gate. Relaxing any of them breaks the bit match.
+
+The single rule most easily broken by an optimization is that Box2D's contact solver
+is sequential Gauss-Seidel: each contact reads the body velocities as mutated by the
+previous contact, in a fixed order, and the per-contact clamps are nonlinear, so any
+reordered sweep produces different floats. The solver spine therefore stays serial and
+in order. Three running float folds (the velocity accumulation, the `minSeparation`
+fold, and the `minSleepTime` fold) also stay serial, because float addition is not
+associative under the frozen flags and a parallel reduction would change the bits.
+This rule is documented in [docs/architecture.md](docs/architecture.md).
 
 Verification runs two controls. Each module is compared in ULP against a golden CPU
-build that links the real Box2D 2.3.0, and the GPU device path is compared against
-the host path of the same source. Zero ULP device-versus-host proves the GPU adds no
+build that links the real Box2D 2.3.0, and the GPU device path is compared against the
+host path of the same source. Zero ULP device-versus-host proves the GPU adds no
 floating-point drift of its own, which isolates any remaining difference to the
-algorithm. Each module ships a 0-ULP micro-test and does not enter the assembled step
-until it is green. See [docs/fidelity.md](docs/fidelity.md).
+algorithm. Each module ships a 0-ULP micro-test. See [docs/fidelity.md](docs/fidelity.md).
+
+## Results
+
+Validated on an A10 (sm_86) with CUDA 12.8.
+
+- **Single-world physics is bit-identical.** A drop, a stack, and a settling pile are
+  0 ULP against the CPU Box2D reference over hundreds of substeps, including the CCD
+  path. The GPU device path is 0 ULP against the host path of the same source on every
+  scenario, so the GPU adds no floating-point drift of its own.
+- **Batched output matches the reference in distribution.** Against the CPU batch
+  reference, the score distribution agrees at a Kolmogorov-Smirnov p-value of 1.0,
+  with queue state and observations byte-exact.
+- **Throughput is about 23K env-steps per second**, roughly 12x a 26-core CPU baseline
+  and about 2x the pre-rewrite version. This is the measured ceiling for a
+  bit-identical Box2D Gauss-Seidel solver on this card. The serial solver is about 74
+  percent of a step and resists parallelizing while preserving the bit match, and
+  occupancy plus data-dependent control flow bound the rest. Throughput scales with the
+  GPU, so a larger card lifts the absolute number.
+  [docs/performance.md](docs/performance.md) has the full breakdown.
+
+Dense fruit-pile worlds carry an irreducible per-substep float32 difference that
+compounds slightly over a full game and stays within outcome spec. This is inherent
+to float32 in large connected islands and is the accepted standard for this class of
+engine. [docs/fidelity.md](docs/fidelity.md) explains it.
 
 ## Usage
 
-The physics core is header-only. Include the assembled step and run one block per
-world:
+The physics core is header-only. The production build steps the whole batch with one
+kernel launch, one thread per world, on the SoA lane-equals-world backend:
 
 ```cpp
-#include "gpu_box2d/gb_world.cuh"   // block-per-world shell + gb_world_step
+// build with -DGB_SOA_GLOBAL for the thread-per-world SoA backend (production path)
+#include "gpu_box2d/gb_world.cuh"   // step declaration + launch helpers
 #include "gpu_box2d/gb_step.cuh"    // assembles the modules into gb_world_step
 
-// pools.world is an array of WorldShared, one per world, in device memory.
-WorldPools pools = /* allocate and seed NW worlds */;
-
-// one kernel launch steps every world: load shared, step, store.
-gb_launch_block_step(pools);        // <<<NW, GB_BLOCK_THREADS, sizeof(WorldShared)>>>
+WorldPoolsSoA pools = /* allocate and seed NW worlds in transposed SoA arrays */;
+gb_launch_thread_step(pools);       // one thread per world steps every world
 ```
 
 A game layer plugs in through the contact hook without touching the physics. The
-fruit-merge example records same-tier touches in `fmBeginContact`, then merges them
-after the step:
+fruit-merge example records same-tier touches in its begin-contact hook, then merges
+them after the step:
 
 ```cpp
-#include "gpu_box2d/gb_pools.cuh"
-#include "fruit_merge/fm_game.cuh"
+#include "fruit_merge/fm_engine.cuh"   // composes the core with the game layer
 
-int s = fmAddFruit(w, /*tier*/ 0, /*x*/ 0.0f, /*y*/ 5.0f, /*vy*/ 0.0f);  // create
-// ... gb_world_step(w) settles the world, firing fmBeginContact on touches ...
-int gained = fmProcessMerges(w);   // act on recorded pairs, score the merges
+int s = fmAddFruit(w, /*tier*/ 0, /*x*/ 0.0f, /*y*/ 5.0f, /*vy*/ 0.0f, /*age*/ 0.0f);
+// fmSettleAndMerge(w) settles the world, firing the merge hook on touches,
+// then acts on the recorded pairs and scores the merges.
+int gained = fmSettleAndMerge(w);
 ```
 
-The core never learns what a fruit is. See
-[examples/fruit_merge/](examples/fruit_merge/).
+The core never learns what a fruit is. It sees circles with a radius and a mass, read
+through `gbCircleRadius`. See [examples/fruit_merge/](examples/fruit_merge/).
 
 ## Build
 
@@ -140,55 +160,46 @@ ARCH=86 ./test/run_gate.sh
 
 ## Status
 
-This repository is early-stage. The validated foundation is here and proven; the full
-parallel engine is in active development. The pieces below are green at 0 ULP against
-Box2D 2.3.0.
+The engine is complete and validated. Single-world physics is bit-identical to Box2D
+2.3.0, the batched engine matches the reference in distribution at KS p=1.0, and the
+full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, the game layer,
+and both memory backends) is in place behind the 0-ULP gate.
 
 | Component | Status |
 |---|---|
-| Bit-identical single-world physics (1-body drop, 2-body stack) | validated, 0 ULP over hundreds of substeps |
-| Block-per-world execution model | validated, 0 ULP host-vs-device on single and two-body worlds |
+| Bit-identical single-world physics (drop, stack, settling pile) | validated, 0 ULP over hundreds of substeps |
+| Narrow-phase manifolds | validated, 0 ULP |
 | Broad-phase (`b2DynamicTree` + `b2BroadPhase`) | validated, exact proxyId and AddPair order |
-| CCD / TOI (GJK distance + `b2TimeOfImpact`) | validated, 0 ULP on the fruit-wall scenario |
+| Contact solver and island (sequential-impulse + DFS assembly) | validated, 0 ULP |
+| CCD / TOI (GJK distance + `b2TimeOfImpact` + SolveTOI) | validated, 0 ULP on the fruit-wall scenario |
+| Thread-per-world SoA execution (production path) | validated, about 23K env-steps/s on an A10 |
+| Block-per-world shared-memory execution | built and measured, slower (see performance.md) |
+| Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
+| Batched output vs CPU reference | KS p=1.0, queue and observations byte-exact |
 | Fidelity-test methodology (ULP gate + device-vs-host control) | validated |
-| Narrow-phase manifolds | in development |
-| Contact solver and island | in development (single and two-body 0 ULP; dense pile shows a 1-ULP device residual) |
-| Block-parallel phases and multi-world step assembly | in development |
-| Batched launcher and Python observation API | in development |
-| Polygons, two-point block solver, joints | future work |
-
-The accurate claim today: the bit-identical single-world physics, the block-per-world
-model, the broad-phase, the CCD path, and the fidelity methodology are proven. The
-contact solver, island, narrow-phase, and game-layer assembly are being built and
-integrated behind the same 0-ULP gate.
+| Polygons, two-point block solver, joints | extension targets, see docs/extending.md |
 
 ## Roadmap
 
-1. Land the narrow-phase, contact solver, and island modules at 0 ULP and assemble
-   them into `gb_world_step`.
-2. Close the dense-island 1-ULP residual to make dense single worlds bit-identical,
-   not only distributionally faithful.
-3. Move the parallel phases (broad-phase, narrow-phase, integration, sleep) to
-   block-parallel while the solver spine stays serial.
-4. Ship the batched launcher and the Python observation API for reinforcement
-   learning.
-5. Extend shape support: polygons, the two-point block solver, then joints. See
-   [docs/extending.md](docs/extending.md).
+The core engine is done. The open direction is extending shape and constraint support
+while keeping the bit-identical guarantee:
 
-## Extending
+1. Polygons: the shape data, the `b2CollidePolygons` and `b2CollidePolygonAndCircle`
+   narrow-phase, and the polygon mass formula.
+2. The two-point block solver for polygon contacts.
+3. Joints: the per-type constraint rows and the joint-contact solve interleave.
 
-The core covers circles and static edges with the single-point solver and CCD.
-[docs/extending.md](docs/extending.md) is the path to polygons, the two-point block
-solver, and joints. The two rules that never bend: go through the accessors, and
-match Box2D's evaluation order, not just its math. Every extension ships a 0-ULP
-micro-test before it joins the step.
+Each step ships a 0-ULP micro-test before it joins the assembled step. See
+[docs/extending.md](docs/extending.md) for the concrete path.
 
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md): block-per-world, the shared-memory
-  arena, and the serial-solver fidelity rule.
+- [docs/architecture.md](docs/architecture.md): thread-per-world execution, the SoA
+  memory layout, and the serial-solver fidelity rule.
 - [docs/fidelity.md](docs/fidelity.md): how bit-identicality is verified and what is
-  verified today.
+  verified.
+- [docs/performance.md](docs/performance.md): the measured throughput, the structural
+  ceiling, GPU scaling, and the two measured-and-rejected execution models.
 - [docs/extending.md](docs/extending.md): adding shapes, the two-point solver, and
   joints.
 

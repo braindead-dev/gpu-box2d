@@ -32,14 +32,15 @@ ctest --test-dir build --output-on-failure
 ## Tests that need the Box2D 2.3.0 reference translation unit
 
 These compare against the upstream Box2D 2.3.0 reference compiled into a separate
-translation unit. They are wired in once the narrow-phase and solver modules are
-assembled and the reference TU is part of the build.
+translation unit. Build them with the reference source on the include path (see the
+build command at the top of each test file).
 
 - **`gb_toi_test.cu`** compares the GJK distance and `b2TimeOfImpact` result against
   the Box2D 2.3.0 CCD reference on a fruit-wall continuous-collision scenario.
   Validated, 0 ULP.
 - **`gb_island_test.cu`** with **`gb_island_ref.cu`** compares the contact solver and
   island assembly against `b2World::Solve`. `gb_test_iface.h` is the flat-POD bridge
-  between the test's type universe and the reference's. The single-drop and two-body
-  scenarios pass at 0 ULP on host and device; the five-body pile currently shows a
-  1-ULP device residual (see ../docs/fidelity.md).
+  between the test's type universe and the reference's. The drop, two-body, and
+  five-body pile scenarios pass at 0 ULP on host and device. The dense-island float32
+  note in [../docs/fidelity.md](../docs/fidelity.md) explains the distributional regime
+  for very large piles.

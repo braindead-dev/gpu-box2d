@@ -96,6 +96,15 @@ if(GPU_BOX2D_BUILD_TESTS)
   set_tests_properties(gb_joint PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_joint")
 
+  # Revolute joint, full (point-to-point + motor + limit). Self-contained (embeds its
+  # Box2D 2.3.0 b2RevoluteJoint reference). Validated, 0 ULP.
+  add_executable(gb_revolute_joint_test test/gb_revolute_joint_test.cu)
+  target_link_libraries(gb_revolute_joint_test PRIVATE gpu_box2d)
+  target_include_directories(gb_revolute_joint_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  add_test(NAME gb_revolute_joint COMMAND gb_revolute_joint_test)
+  set_tests_properties(gb_revolute_joint PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_revolute_joint")
+
   # Distance joint (rigid rod + soft spring). Self-contained (embeds its Box2D 2.3.0
   # b2DistanceJoint reference). Validated, 0 ULP.
   add_executable(gb_distance_joint_test test/gb_distance_joint_test.cu)

@@ -77,7 +77,7 @@ verifiable while it is built, rather than validating only at the end.
 | block solver | b2ContactSolver two-point LCP cascade + 2x2 block | yes |
 | island | b2Island::Solve integrate / sleep + DFS order | yes |
 | ccd | b2TimeOfImpact / b2Distance (GJK) | yes |
-| joint (revolute) | b2RevoluteJoint init / velocity / position (point-to-point) | yes |
+| joint (revolute) | b2RevoluteJoint init / velocity / position (point-to-point, motor, limit) | yes |
 | joint (distance) | b2DistanceJoint init / velocity / position (rigid + soft) | yes |
 | joint (weld) | b2WeldJoint init / velocity / position (3x3, rigid + soft) | yes |
 | joint (prismatic) | b2PrismaticJoint init / velocity / position (free + limit + motor) | yes |
@@ -103,9 +103,12 @@ The following are green at 0 ULP against the CPU Box2D reference:
   and position spine on a box resting on the ground and reproduces every body
   kinematic and both warm-start impulses at 0 ULP, exercising the 2x2 block matrix,
   its inverse, and the four-case LCP cascade.
-- **Revolute joint.** `test/gb_joint_test.cu` swings a two-body pendulum over
-  hundreds of substeps and reproduces the bob velocity, angular velocity, position,
-  angle, and the warm-start impulse at 0 ULP.
+- **Revolute joint.** `test/gb_joint_test.cu` swings a two-body pendulum on the
+  point-to-point joint over hundreds of substeps and reproduces the bob velocity,
+  angular velocity, position, angle, and the warm-start impulse at 0 ULP.
+  `test/gb_revolute_joint_test.cu` adds the motor and the angle limit (the full 3x3
+  joint) and reproduces the same state plus the motor impulse at 0 ULP over the
+  point-to-point, motorized, and angle-limited cases.
 - **Distance joint.** `test/gb_distance_joint_test.cu` runs a rigid rod and a soft
   spring over hundreds of substeps and reproduces the bob velocity, angular velocity,
   position, angle, and the warm-start impulse at 0 ULP, covering both the rigid
@@ -169,7 +172,7 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports nine green micro-tests and zero red:
+flags, `test/run_gate.sh` reports ten green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
@@ -177,11 +180,12 @@ GREEN  gb_polygon (mass + polygon-polygon + polygon-circle, 0 ULP)
 GREEN  gb_collide_edge_polygon (b2CollideEdgeAndPolygon, face-A + face-B, 0 ULP)
 GREEN  gb_block_solver (two-point LCP block solve, 0 ULP)
 GREEN  gb_joint (revolute pendulum, 0 ULP)
+GREEN  gb_revolute_joint (point-to-point + motor + limit, 0 ULP)
 GREEN  gb_distance_joint (rigid rod + soft spring, 0 ULP)
 GREEN  gb_weld_joint (rigid + soft weld, 3x3 path, 0 ULP)
 GREEN  gb_prismatic_joint (free + limit + motor, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
-GATE SUMMARY: 9 green, 0 red
+GATE SUMMARY: 10 green, 0 red
 ALL GREEN.
 ```
 

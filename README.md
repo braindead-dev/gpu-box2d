@@ -44,7 +44,7 @@ Validated on an A10 (sm_86) with CUDA 12.8.
 
 - **Single-world physics is bit-identical.** A circle settling on a static edge, a stack of circles, and a settling pile are 0 ULP against the CPU Box2D reference over hundreds of substeps, including the CCD path. The GPU device path is 0 ULP against the host path of the same source on every scenario, so the GPU adds no floating-point drift of its own.
 - **Polygons and the two-point block solver are bit-identical.** The polygon mass formula, the `b2CollidePolygons` two-point manifold, the `b2CollidePolygonAndCircle` manifold, and the two-point block-solver LCP cascade through the full velocity and position spine are 0 ULP against the Box2D 2.3.0 reference.
-- **The joints are bit-identical.** A two-body pendulum on a point-to-point revolute joint, a rigid rod and a soft spring on a distance joint, a welded bar on a weld joint, and a slider with a limit and a motor on a prismatic joint are each 0 ULP against the Box2D 2.3.0 reference over hundreds of substeps.
+- **The joints are bit-identical.** A revolute joint with its motor and angle limit, a rigid rod and a soft spring on a distance joint, a welded bar on a weld joint, and a slider with a limit and a motor on a prismatic joint are each 0 ULP against the Box2D 2.3.0 reference over hundreds of substeps.
 - **Batched output matches the reference in distribution.** Against the CPU batch reference of the example application, the output distribution agrees at a Kolmogorov-Smirnov p-value of 1.0, with per-world state byte-exact.
 - **Throughput is about 23K env-steps per second**, roughly 12x a 26-core CPU baseline and about 2x the pre-rewrite version. This is the measured ceiling for a bit-identical Box2D Gauss-Seidel solver on this card. The serial solver is about 74 percent of a step and resists parallelizing while preserving the bit match, and occupancy plus data-dependent control flow bound the rest. Throughput scales with the GPU, so a larger card lifts the absolute number. [docs/performance.md](docs/performance.md) has the full breakdown.
 
@@ -93,7 +93,7 @@ CXX=clang++ ./test/run_gate_host.sh
 
 ## Status
 
-The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, nine micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
+The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, ten micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
 
 | Component | Status |
 |---|---|
@@ -106,7 +106,7 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Broad-phase (`b2DynamicTree` + `b2BroadPhase`) | validated, exact proxyId and AddPair order |
 | Contact solver and island (sequential-impulse + DFS assembly) | validated, 0 ULP |
 | CCD / TOI (GJK distance + `b2TimeOfImpact` + SolveTOI) | validated, 0 ULP on the circle-edge sweep |
-| Revolute joint (`b2RevoluteJoint`, point-to-point) | validated, 0 ULP on a pendulum over hundreds of substeps |
+| Revolute joint (`b2RevoluteJoint`, point-to-point + motor + limit) | validated, 0 ULP on a pendulum, a motor, and an angle limit over hundreds of substeps |
 | Distance joint (`b2DistanceJoint`, rigid + soft) | validated, 0 ULP on a rod and a spring over hundreds of substeps |
 | Weld joint (`b2WeldJoint`, 3x3, rigid + soft) | validated, 0 ULP on a welded bar over hundreds of substeps |
 | Prismatic joint (`b2PrismaticJoint`, free + limit + motor) | validated, 0 ULP on a slider over hundreds of substeps |
@@ -114,7 +114,7 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Thread-per-world SoA execution (production path) | validated, about 23K env-steps/s on an A10 |
 | Block-per-world shared-memory execution | built and measured, slower (see performance.md) |
 | Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
-| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 9 micro-tests, 0 red |
+| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 10 micro-tests, 0 red |
 
 ## Roadmap
 

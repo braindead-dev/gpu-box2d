@@ -27,7 +27,7 @@ green micro-test. This is how the engine stays verifiable while it is built.
 | contact solver | b2ContactSolver single-point and two-point velocity + position iters | yes, serial sweep |
 | island | b2Island::Solve integrate / sleep + DFS order | yes |
 | ccd | b2TimeOfImpact / b2Distance (GJK) | yes |
-| joint (revolute) | b2RevoluteJoint point-to-point init / velocity / position | yes |
+| joint (revolute) | b2RevoluteJoint init / velocity / position (point-to-point, motor, limit) | yes |
 | joint (distance) | b2DistanceJoint init / velocity / position (rigid + soft) | yes |
 | joint (weld) | b2WeldJoint init / velocity / position (3x3, rigid + soft) | yes |
 | joint (prismatic) | b2PrismaticJoint init / velocity / position (free + limit + motor) | yes |

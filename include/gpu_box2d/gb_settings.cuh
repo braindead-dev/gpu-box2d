@@ -27,6 +27,7 @@
 #define GB_BAUMGARTE             0.2f
 #define GB_TOI_BAUMGARTE         0.75f
 #define GB_MAX_LINEAR_CORRECTION 0.2f
+#define GB_MAX_ANGULAR_CORRECTION (8.0f / 180.0f * GB_PI)   // b2_maxAngularCorrection
 #define GB_VELOCITY_THRESHOLD    1.0f
 #define GB_MAX_TRANSLATION       2.0f
 #define GB_MAX_TRANSLATION_SQ    (GB_MAX_TRANSLATION * GB_MAX_TRANSLATION)

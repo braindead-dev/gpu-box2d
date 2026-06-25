@@ -102,6 +102,19 @@ and the position solve.
   and compares the bob velocity, angular velocity, position, angle, and the
   warm-start impulse against the Box2D 2.3.0 reference at 0 ULP.
 
+## The revolute motor and angle limit (shipped)
+
+`gb_revolute_joint.cuh` ports the full `b2RevoluteJoint`: the point-to-point anchor
+block plus the angular motor and limit row, the 3x3 path. The motor drives the relative
+angle toward a target speed, clamped to the maximum motor torque; the limit bounds the
+relative angle between a lower and an upper stop, which turns the solve into the 3x3
+path with the limit impulse clamped by sign at the active stop. The point-to-point-only
+header `gb_joint.cuh` stays wired into the assembled step, so that path is unchanged;
+this module is the complete joint validated standalone. `gb_revolute_joint_test.cu` runs
+a point-to-point pendulum, a motorized joint, and an angle-limited joint over hundreds
+of substeps and reproduces every body kinematic plus the three impulse components and
+the motor impulse at 0 ULP.
+
 ## The distance and weld joints (shipped)
 
 Two more joint types follow the same module pattern: a header against the accessor
@@ -197,11 +210,10 @@ manifold. It replaces the two-segment-polygon stand-in the wired step used befor
 
 The same path extends the engine further.
 
-- **More joint types.** The revolute motor and angle-limit rows add the 3x3 path
-  (`b2Mat33::Solve22` / `Solve33`) on top of the point-to-point joint; the `GBMat33`
-  ops the weld and prismatic joints already use carry it. The pulley and gear joints
-  each have their own `InitVelocityConstraints`, `SolveVelocityConstraints`, and
-  `SolvePositionConstraints` and slot into the same island interleave.
+- **More joint types.** The pulley and gear joints each have their own
+  `InitVelocityConstraints`, `SolveVelocityConstraints`, and
+  `SolvePositionConstraints` and slot into the same island interleave, reusing the
+  `GBMat22` and `GBMat33` ops the existing joints carry.
 - **More shapes.** The chain shape and the general edge (with vertex0/vertex3
   connectivity) follow the polygon pattern: shape data behind new accessors, a
   narrow-phase ported in order, and a tight AABB helper.

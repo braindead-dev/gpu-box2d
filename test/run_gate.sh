@@ -107,6 +107,18 @@ else
   bad "gb_weld_joint failed to build"
 fi
 
+# Revolute joint, full (point-to-point + motor + limit): self-contained (embeds its
+# Box2D 2.3.0 b2RevoluteJoint reference). Validated, 0-ULP.
+if nvcc $FLAGS -I"$INC" -I"$HERE" "$HERE/gb_revolute_joint_test.cu" -o "$HERE/gb_revolute_joint_test" 2>/dev/null; then
+  if "$HERE/gb_revolute_joint_test" 2>&1 | grep -q "PASS gb_revolute_joint"; then
+    ok "gb_revolute_joint (point-to-point + motor + limit, 0 ULP)"
+  else
+    bad "gb_revolute_joint diverged"
+  fi
+else
+  bad "gb_revolute_joint failed to build"
+fi
+
 # Prismatic joint (free + limit + motor): self-contained (embeds its Box2D 2.3.0
 # b2PrismaticJoint reference). Validated, 0-ULP.
 if nvcc $FLAGS -I"$INC" -I"$HERE" "$HERE/gb_prismatic_joint_test.cu" -o "$HERE/gb_prismatic_joint_test" 2>/dev/null; then

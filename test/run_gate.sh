@@ -47,6 +47,18 @@ else
   bad "gb_polygon failed to build"
 fi
 
+# Edge-polygon narrow-phase: self-contained (embeds its Box2D 2.3.0
+# b2CollideEdgeAndPolygon reference). Validated, 0-ULP.
+if nvcc $FLAGS -DGB_ENABLE_POLYGONS -I"$INC" -I"$HERE" "$HERE/gb_collide_edge_polygon_test.cu" -o "$HERE/gb_collide_edge_polygon_test" 2>/dev/null; then
+  if "$HERE/gb_collide_edge_polygon_test" 2>&1 | grep -q "PASS gb_collide_edge_polygon"; then
+    ok "gb_collide_edge_polygon (b2CollideEdgeAndPolygon, face-A + face-B, 0 ULP)"
+  else
+    bad "gb_collide_edge_polygon diverged"
+  fi
+else
+  bad "gb_collide_edge_polygon failed to build"
+fi
+
 # Two-point block solver: self-contained (embeds its Box2D 2.3.0 b2ContactSolver
 # reference). Validated, 0-ULP.
 if nvcc $FLAGS -I"$INC" -I"$HERE" "$HERE/gb_block_solver_test.cu" -o "$HERE/gb_block_solver_test" 2>/dev/null; then

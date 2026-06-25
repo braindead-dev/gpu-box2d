@@ -71,6 +71,7 @@ verifiable while it is built, rather than validating only at the end.
 | math | b2Math ops | yes, same ops in the same order |
 | collision | b2CollideCircles / b2CollideEdgeAndCircle / worldManifold | yes |
 | polygon | b2PolygonShape mass / b2CollidePolygons / b2CollidePolygonAndCircle | yes |
+| edge-polygon | b2CollideEdgeAndPolygon (b2EPCollider) | yes |
 | broad-phase | b2DynamicTree proxyId sequence + AddPair order | yes, integer-exact |
 | contact solver | b2ContactSolver velocity + position iters (1-point and 2-point block) | yes, serial sweep |
 | block solver | b2ContactSolver two-point LCP cascade + 2x2 block | yes |
@@ -90,6 +91,11 @@ The following are green at 0 ULP against the CPU Box2D reference:
   `b2CollidePolygons` two-point manifold, and the `b2CollidePolygonAndCircle`
   manifold at 0 ULP, including the local normal, the plane point, both clip points,
   and the contact ids.
+- **Edge-polygon.** `test/gb_collide_edge_polygon_test.cu` reproduces the
+  `b2CollideEdgeAndPolygon` manifold at 0 ULP on a box flat on a horizontal edge, a
+  box on a sloped edge, a box overhanging a short edge (the polygon-face path), and a
+  separated box, covering the face-A and face-B reference cases, the point count, the
+  local normal and point, both clip points, and both contact ids.
 - **Two-point block solver.** `test/gb_block_solver_test.cu` drives the full velocity
   and position spine on a box resting on the ground and reproduces every body
   kinematic and both warm-start impulses at 0 ULP, exercising the 2x2 block matrix,
@@ -148,15 +154,16 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports five green micro-tests and zero red:
+flags, `test/run_gate.sh` reports six green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
 GREEN  gb_polygon (mass + polygon-polygon + polygon-circle, 0 ULP)
+GREEN  gb_collide_edge_polygon (b2CollideEdgeAndPolygon, face-A + face-B, 0 ULP)
 GREEN  gb_block_solver (two-point LCP block solve, 0 ULP)
 GREEN  gb_joint (revolute pendulum, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
-GATE SUMMARY: 5 green, 0 red
+GATE SUMMARY: 6 green, 0 red
 ALL GREEN.
 ```
 

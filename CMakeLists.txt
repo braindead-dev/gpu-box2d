@@ -68,6 +68,16 @@ if(GPU_BOX2D_BUILD_TESTS)
   set_tests_properties(gb_polygon PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_polygon")
 
+  # Edge-polygon narrow-phase. Self-contained (embeds its Box2D 2.3.0
+  # b2CollideEdgeAndPolygon reference). Validated, 0 ULP.
+  add_executable(gb_collide_edge_polygon_test test/gb_collide_edge_polygon_test.cu)
+  target_link_libraries(gb_collide_edge_polygon_test PRIVATE gpu_box2d)
+  target_include_directories(gb_collide_edge_polygon_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  target_compile_definitions(gb_collide_edge_polygon_test PRIVATE GB_ENABLE_POLYGONS)
+  add_test(NAME gb_collide_edge_polygon COMMAND gb_collide_edge_polygon_test)
+  set_tests_properties(gb_collide_edge_polygon PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_collide_edge_polygon")
+
   # Two-point block solver. Self-contained (embeds its Box2D 2.3.0 b2ContactSolver
   # reference). Validated, 0 ULP.
   add_executable(gb_block_solver_test test/gb_block_solver_test.cu)

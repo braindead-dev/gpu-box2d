@@ -370,6 +370,278 @@ GB_HD inline void gbCollidePolygonAndCircle(GBManifold& m,
     }
 }
 
+// =========================== Edge-polygon narrow-phase ======================
+// b2CollideEdgeAndPolygon (b2CollideEdge.cpp, b2EPCollider). An edge collides with a
+// convex polygon accounting for edge adjacency: the edge can carry a preceding vertex
+// (vertex0) and a following vertex (vertex3), which constrain the valid normal range so
+// a polygon sliding across a chain of edges does not catch on an interior vertex. For a
+// single-segment edge both flags are false and the routine reduces to the front/back
+// face test. The port keeps the full adjacency logic so a chain shape reuses it.
+//
+// The manifold convention matches b2WorldManifold::Initialize: a face-A manifold stores
+// the reference face in the edge frame (localNormal/localPoint) and each clip point in
+// the polygon (B) frame; a face-B manifold stores the reference face in the polygon
+// frame and each clip point in the edge (A) frame.
+
+// b2EdgeShape (Collision/Shapes/b2EdgeShape.h). vertex1/vertex2 are the segment;
+// vertex0/vertex3 are the optional adjacent vertices that set the normal range.
+struct GBEdgeShape {
+    V2   vertex0, vertex1, vertex2, vertex3;
+    bool hasVertex0, hasVertex3;
+};
+
+// b2EPAxis. The best separating axis found by the collider.
+struct GBEPAxis { int type; int index; float separation; };
+#define GB_EP_AXIS_UNKNOWN 0
+#define GB_EP_AXIS_EDGE_A  1
+#define GB_EP_AXIS_EDGE_B  2
+
+// b2TempPolygon. Polygon B expressed in the edge frame (frame A).
+struct GBTempPolygon { V2 vertices[GB_MAX_POLYGON_VERTICES]; V2 normals[GB_MAX_POLYGON_VERTICES]; int count; };
+
+// b2ReferenceFace. The face the incident edge is clipped against.
+struct GBReferenceFace {
+    int i1, i2;
+    V2  v1, v2;
+    V2  normal;
+    V2  sideNormal1; float sideOffset1;
+    V2  sideNormal2; float sideOffset2;
+};
+
+// b2MulT(b2Transform, b2Transform): C = A^-1 * B, used to express B in A's frame.
+GB_HD inline Xf gbMulTxf(Xf A, Xf B){
+    Xf C;
+    // C.q = b2MulT(A.q, B.q)
+    C.q.s = A.q.c * B.q.s - A.q.s * B.q.c;
+    C.q.c = A.q.c * B.q.c + A.q.s * B.q.s;
+    // C.p = b2MulT(A.q, B.p - A.p)
+    float px = B.p.x - A.p.x, py = B.p.y - A.p.y;
+    C.p = v2(A.q.c * px + A.q.s * py, -A.q.s * px + A.q.c * py);
+    return C;
+}
+
+// The collider state (b2EPCollider members) carried through the phase functions.
+struct GBEPCollider {
+    GBTempPolygon polygonB;
+    Xf   xf;
+    V2   centroidB;
+    V2   v0, v1, v2, v3;
+    V2   normal0, normal1, normal2;
+    V2   normal;
+    V2   lowerLimit, upperLimit;
+    float radius;
+    bool front;
+};
+
+// b2EPCollider::ComputeEdgeSeparation.
+GB_HD inline GBEPAxis gbEPComputeEdgeSeparation(const GBEPCollider& c){
+    GBEPAxis axis;
+    axis.type = GB_EP_AXIS_EDGE_A;
+    axis.index = c.front ? 0 : 1;
+    axis.separation = GB_MAXFLOAT;
+    for (int i = 0; i < c.polygonB.count; ++i){
+        float s = b2Dot(c.normal, c.polygonB.vertices[i] - c.v1);
+        if (s < axis.separation) axis.separation = s;
+    }
+    return axis;
+}
+
+// b2EPCollider::ComputePolygonSeparation.
+GB_HD inline GBEPAxis gbEPComputePolygonSeparation(const GBEPCollider& c){
+    GBEPAxis axis;
+    axis.type = GB_EP_AXIS_UNKNOWN;
+    axis.index = -1;
+    axis.separation = -GB_MAXFLOAT;
+    V2 perp = v2(-c.normal.y, c.normal.x);
+    for (int i = 0; i < c.polygonB.count; ++i){
+        V2 n = -c.polygonB.normals[i];
+        float s1 = b2Dot(n, c.polygonB.vertices[i] - c.v1);
+        float s2 = b2Dot(n, c.polygonB.vertices[i] - c.v2);
+        float s = b2MinF(s1, s2);
+        if (s > c.radius){
+            axis.type = GB_EP_AXIS_EDGE_B; axis.index = i; axis.separation = s;
+            return axis;
+        }
+        if (b2Dot(n, perp) >= 0.0f){
+            if (b2Dot(n - c.upperLimit, c.normal) < -GB_ANGULAR_SLOP) continue;
+        } else {
+            if (b2Dot(n - c.lowerLimit, c.normal) < -GB_ANGULAR_SLOP) continue;
+        }
+        if (s > axis.separation){
+            axis.type = GB_EP_AXIS_EDGE_B; axis.index = i; axis.separation = s;
+        }
+    }
+    return axis;
+}
+
+// b2EPCollider::Collide. Classifies the edge, sets the normal range, finds the best
+// axis, clips the incident edge, and writes the manifold.
+GB_HD inline void gbCollideEdgeAndPolygon(GBManifold& m, const GBEdgeShape& edgeA, Xf xfA,
+                                          const GBPolygon& polygonB, Xf xfB){
+    GBEPCollider c;
+    c.xf = gbMulTxf(xfA, xfB);
+    c.centroidB = b2MulTV(c.xf, polygonB.centroid);
+    c.v0 = edgeA.vertex0; c.v1 = edgeA.vertex1; c.v2 = edgeA.vertex2; c.v3 = edgeA.vertex3;
+    bool hasVertex0 = edgeA.hasVertex0;
+    bool hasVertex3 = edgeA.hasVertex3;
+
+    V2 edge1 = c.v2 - c.v1; b2Normalize(edge1);
+    c.normal1 = v2(edge1.y, -edge1.x);
+    float offset1 = b2Dot(c.normal1, c.centroidB - c.v1);
+    float offset0 = 0.0f, offset2 = 0.0f;
+    bool convex1 = false, convex2 = false;
+
+    if (hasVertex0){
+        V2 edge0 = c.v1 - c.v0; b2Normalize(edge0);
+        c.normal0 = v2(edge0.y, -edge0.x);
+        convex1 = b2Cross(edge0, edge1) >= 0.0f;
+        offset0 = b2Dot(c.normal0, c.centroidB - c.v0);
+    }
+    if (hasVertex3){
+        V2 edge2 = c.v3 - c.v2; b2Normalize(edge2);
+        c.normal2 = v2(edge2.y, -edge2.x);
+        convex2 = b2Cross(edge1, edge2) > 0.0f;
+        offset2 = b2Dot(c.normal2, c.centroidB - c.v2);
+    }
+
+    if (hasVertex0 && hasVertex3){
+        if (convex1 && convex2){
+            c.front = offset0 >= 0.0f || offset1 >= 0.0f || offset2 >= 0.0f;
+            if (c.front){ c.normal = c.normal1; c.lowerLimit = c.normal0; c.upperLimit = c.normal2; }
+            else        { c.normal = -c.normal1; c.lowerLimit = -c.normal1; c.upperLimit = -c.normal1; }
+        } else if (convex1){
+            c.front = offset0 >= 0.0f || (offset1 >= 0.0f && offset2 >= 0.0f);
+            if (c.front){ c.normal = c.normal1; c.lowerLimit = c.normal0; c.upperLimit = c.normal1; }
+            else        { c.normal = -c.normal1; c.lowerLimit = -c.normal2; c.upperLimit = -c.normal1; }
+        } else if (convex2){
+            c.front = offset2 >= 0.0f || (offset0 >= 0.0f && offset1 >= 0.0f);
+            if (c.front){ c.normal = c.normal1; c.lowerLimit = c.normal1; c.upperLimit = c.normal2; }
+            else        { c.normal = -c.normal1; c.lowerLimit = -c.normal1; c.upperLimit = -c.normal0; }
+        } else {
+            c.front = offset0 >= 0.0f && offset1 >= 0.0f && offset2 >= 0.0f;
+            if (c.front){ c.normal = c.normal1; c.lowerLimit = c.normal1; c.upperLimit = c.normal1; }
+            else        { c.normal = -c.normal1; c.lowerLimit = -c.normal2; c.upperLimit = -c.normal0; }
+        }
+    } else if (hasVertex0){
+        if (convex1){
+            c.front = offset0 >= 0.0f || offset1 >= 0.0f;
+            if (c.front){ c.normal = c.normal1; c.lowerLimit = c.normal0; c.upperLimit = -c.normal1; }
+            else        { c.normal = -c.normal1; c.lowerLimit = c.normal1; c.upperLimit = -c.normal1; }
+        } else {
+            c.front = offset0 >= 0.0f && offset1 >= 0.0f;
+            if (c.front){ c.normal = c.normal1; c.lowerLimit = c.normal1; c.upperLimit = -c.normal1; }
+            else        { c.normal = -c.normal1; c.lowerLimit = c.normal1; c.upperLimit = -c.normal0; }
+        }
+    } else if (hasVertex3){
+        if (convex2){
+            c.front = offset1 >= 0.0f || offset2 >= 0.0f;
+            if (c.front){ c.normal = c.normal1; c.lowerLimit = -c.normal1; c.upperLimit = c.normal2; }
+            else        { c.normal = -c.normal1; c.lowerLimit = -c.normal1; c.upperLimit = c.normal1; }
+        } else {
+            c.front = offset1 >= 0.0f && offset2 >= 0.0f;
+            if (c.front){ c.normal = c.normal1; c.lowerLimit = -c.normal1; c.upperLimit = c.normal1; }
+            else        { c.normal = -c.normal1; c.lowerLimit = -c.normal2; c.upperLimit = c.normal1; }
+        }
+    } else {
+        c.front = offset1 >= 0.0f;
+        if (c.front){ c.normal = c.normal1; c.lowerLimit = -c.normal1; c.upperLimit = -c.normal1; }
+        else        { c.normal = -c.normal1; c.lowerLimit = c.normal1; c.upperLimit = c.normal1; }
+    }
+
+    // Get polygonB in frameA.
+    c.polygonB.count = polygonB.count;
+    for (int i = 0; i < polygonB.count; ++i){
+        c.polygonB.vertices[i] = b2MulTV(c.xf, polygonB.vertices[i]);
+        c.polygonB.normals[i]  = b2MulRV(c.xf.q, polygonB.normals[i]);
+    }
+    c.radius = 2.0f * GB_POLYGON_RADIUS;
+    m.pointCount = 0;
+
+    GBEPAxis edgeAxis = gbEPComputeEdgeSeparation(c);
+    if (edgeAxis.type == GB_EP_AXIS_UNKNOWN) return;
+    if (edgeAxis.separation > c.radius) return;
+    GBEPAxis polygonAxis = gbEPComputePolygonSeparation(c);
+    if (polygonAxis.type != GB_EP_AXIS_UNKNOWN && polygonAxis.separation > c.radius) return;
+
+    const float k_relativeTol = 0.98f;
+    const float k_absoluteTol = 0.001f;
+    GBEPAxis primaryAxis;
+    if (polygonAxis.type == GB_EP_AXIS_UNKNOWN) primaryAxis = edgeAxis;
+    else if (polygonAxis.separation > k_relativeTol * edgeAxis.separation + k_absoluteTol) primaryAxis = polygonAxis;
+    else primaryAxis = edgeAxis;
+
+    GBClipVertex ie[2];
+    GBReferenceFace rf;
+    if (primaryAxis.type == GB_EP_AXIS_EDGE_A){
+        m.type = GB_MANIFOLD_FACE_A;
+        int bestIndex = 0;
+        float bestValue = b2Dot(c.normal, c.polygonB.normals[0]);
+        for (int i = 1; i < c.polygonB.count; ++i){
+            float value = b2Dot(c.normal, c.polygonB.normals[i]);
+            if (value < bestValue){ bestValue = value; bestIndex = i; }
+        }
+        int i1 = bestIndex;
+        int i2 = i1 + 1 < c.polygonB.count ? i1 + 1 : 0;
+        ie[0].v = c.polygonB.vertices[i1];
+        ie[0].indexA = 0; ie[0].indexB = i1; ie[0].typeA = GB_FEATURE_FACE; ie[0].typeB = GB_FEATURE_VERTEX;
+        ie[1].v = c.polygonB.vertices[i2];
+        ie[1].indexA = 0; ie[1].indexB = i2; ie[1].typeA = GB_FEATURE_FACE; ie[1].typeB = GB_FEATURE_VERTEX;
+        if (c.front){ rf.i1 = 0; rf.i2 = 1; rf.v1 = c.v1; rf.v2 = c.v2; rf.normal = c.normal1; }
+        else        { rf.i1 = 1; rf.i2 = 0; rf.v1 = c.v2; rf.v2 = c.v1; rf.normal = -c.normal1; }
+    } else {
+        m.type = GB_MANIFOLD_FACE_B;
+        ie[0].v = c.v1;
+        ie[0].indexA = 0; ie[0].indexB = primaryAxis.index; ie[0].typeA = GB_FEATURE_VERTEX; ie[0].typeB = GB_FEATURE_FACE;
+        ie[1].v = c.v2;
+        ie[1].indexA = 0; ie[1].indexB = primaryAxis.index; ie[1].typeA = GB_FEATURE_VERTEX; ie[1].typeB = GB_FEATURE_FACE;
+        rf.i1 = primaryAxis.index;
+        rf.i2 = rf.i1 + 1 < c.polygonB.count ? rf.i1 + 1 : 0;
+        rf.v1 = c.polygonB.vertices[rf.i1];
+        rf.v2 = c.polygonB.vertices[rf.i2];
+        rf.normal = c.polygonB.normals[rf.i1];
+    }
+    rf.sideNormal1 = v2(rf.normal.y, -rf.normal.x);
+    rf.sideNormal2 = -rf.sideNormal1;
+    rf.sideOffset1 = b2Dot(rf.sideNormal1, rf.v1);
+    rf.sideOffset2 = b2Dot(rf.sideNormal2, rf.v2);
+
+    GBClipVertex clipPoints1[2];
+    GBClipVertex clipPoints2[2];
+    int np;
+    np = gbClipSegmentToLine(clipPoints1, ie, rf.sideNormal1, rf.sideOffset1, rf.i1);
+    if (np < GB_MAX_MANIFOLD_POINTS) return;
+    np = gbClipSegmentToLine(clipPoints2, clipPoints1, rf.sideNormal2, rf.sideOffset2, rf.i2);
+    if (np < GB_MAX_MANIFOLD_POINTS) return;
+
+    if (primaryAxis.type == GB_EP_AXIS_EDGE_A){
+        m.localNormal = rf.normal;
+        m.localPoint  = rf.v1;
+    } else {
+        m.localNormal = polygonB.normals[rf.i1];
+        m.localPoint  = polygonB.vertices[rf.i1];
+    }
+    int pointCount = 0;
+    for (int i = 0; i < GB_MAX_MANIFOLD_POINTS; ++i){
+        float separation = b2Dot(rf.normal, clipPoints2[i].v - rf.v1);
+        if (separation <= c.radius){
+            V2 localPt; unsigned int key;
+            if (primaryAxis.type == GB_EP_AXIS_EDGE_A){
+                localPt = b2MulTinvV(c.xf, clipPoints2[i].v);
+                key = gbFeatureKey(clipPoints2[i].indexA, clipPoints2[i].indexB,
+                                   clipPoints2[i].typeA, clipPoints2[i].typeB);
+            } else {
+                localPt = clipPoints2[i].v;
+                key = gbFeatureKey(clipPoints2[i].indexB, clipPoints2[i].indexA,
+                                   clipPoints2[i].typeB, clipPoints2[i].typeA);
+            }
+            if (pointCount == 0){ m.pLocalPoint = localPt; m.id0 = key; }
+            else                { m.pLocalPoint2 = localPt; m.id1 = key; }
+            ++pointCount;
+        }
+    }
+    m.pointCount = pointCount;
+}
+
 // =========================== Per-contact helpers ============================
 // Body transform from the cached xf fields, read via accessors.
 GB_HD inline Xf gbBodyXf(GBWorld& w, int i){
@@ -393,20 +665,6 @@ GB_HD inline void gbLoadPolygon(GBWorld& w, int s, GBPolygon& p){
         p.vertices[i] = v2(BODY(w, polyVx, vs), BODY(w, polyVy, vs));
         p.normals[i]  = v2(BODY(w, polyNx, vs), BODY(w, polyNy, vs));
     }
-}
-
-// An edge as a degenerate two-vertex polygon, so the polygon-polygon narrow-phase
-// can collide a ground edge against a polygon body. The two normals point to either
-// side of the segment, matching how Box2D treats an edge in b2CollideEdgeAndPolygon's
-// face setup for the single-segment case.
-GB_HD inline void gbEdgeAsPolygon(V2 A, V2 B, float edgeR, GBPolygon& p){
-    p.count = 2;
-    p.radius = edgeR;
-    p.vertices[0] = A; p.vertices[1] = B;
-    V2 e = B - A; b2Normalize(e);
-    V2 n = v2(e.y, -e.x);
-    p.normals[0] = n; p.normals[1] = -n;
-    p.centroid = 0.5f*(A + B);
 }
 #endif
 
@@ -465,11 +723,14 @@ GB_HD inline void gbNarrowPhase(GBWorld& w, int bodyA, int bodyB, int edge, GBMa
         V2 A = v2(EDGE(w, edgeAx, edge), EDGE(w, edgeAy, edge));
         V2 B = v2(EDGE(w, edgeBx, edge), EDGE(w, edgeBy, edge));
         if (shapeB == GB_SHAPE_POLYGON){
-            // edge (A) vs polygon (B): the edge is the reference, modeled as a
-            // two-vertex polygon so b2CollidePolygons drives the clip.
-            GBPolygon eA; gbEdgeAsPolygon(A, B, GB_POLYGON_RADIUS, eA);
+            // edge (A) vs polygon (B): the dedicated b2CollideEdgeAndPolygon. The
+            // ground edges are single segments, so vertex0/vertex3 are absent and the
+            // adjacency logic reduces to the front/back face test.
+            GBEdgeShape eA;
+            eA.vertex1 = A; eA.vertex2 = B; eA.vertex0 = v2(0,0); eA.vertex3 = v2(0,0);
+            eA.hasVertex0 = false; eA.hasVertex3 = false;
             GBPolygon pB; gbLoadPolygon(w, bodyB, pB);
-            gbCollidePolygons(m, eA, gbBodyXf(w, bodyA), pB, gbBodyXf(w, bodyB));
+            gbCollideEdgeAndPolygon(m, eA, gbBodyXf(w, bodyA), pB, gbBodyXf(w, bodyB));
         } else {
             gbCollideEdgeAndCircle(m, A, B, GB_POLYGON_RADIUS, gbCircleRadius(w, bodyB),
                                    gbBodyXf(w, bodyA), gbBodyXf(w, bodyB));

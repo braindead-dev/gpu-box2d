@@ -22,6 +22,7 @@
 
 // ---- solver tolerances (b2Settings.h) ----
 #define GB_LINEAR_SLOP           0.005f
+#define GB_ANGULAR_SLOP          (2.0f / 180.0f * GB_PI)   // b2_angularSlop
 #define GB_POLYGON_RADIUS        (2.0f * GB_LINEAR_SLOP)   // edge skin = 0.01
 #define GB_BAUMGARTE             0.2f
 #define GB_TOI_BAUMGARTE         0.75f

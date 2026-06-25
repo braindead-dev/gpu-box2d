@@ -108,11 +108,10 @@ With `GB_ENABLE_POLYGONS` and `GB_ENABLE_JOINTS` the assembled `gb_world_step` d
 the new paths end to end.
 
 - **Shape dispatch.** `gbContactUpdate` reads each fixture's shape tag through
-  `gbBodyShape` and calls `gbCollideCircles`, `gbCollidePolygonAndCircle`, or
-  `gbCollidePolygons` accordingly, writing the manifold point count and the second
-  clip point into the contact cache. A ground edge against a polygon body is collided
-  by treating the edge as a two-segment polygon (the dedicated
-  `b2CollideEdgeAndPolygon` is a roadmap refinement).
+  `gbBodyShape` and calls `gbCollideCircles`, `gbCollidePolygonAndCircle`,
+  `gbCollidePolygons`, or `gbCollideEdgeAndPolygon` accordingly, writing the manifold
+  point count and the second clip point into the contact cache. A ground edge against a
+  polygon body uses the dedicated `b2CollideEdgeAndPolygon` port.
 - **Broad-phase and solver radius.** The brute-force broad-phase AABB uses the rotated
   polygon vertex bound for a polygon body, and the island constraint load uses the
   polygon skin radius. Both branch on the shape tag and leave the circle path
@@ -131,13 +130,33 @@ the new paths end to end.
   swings while holding its anchor distance. This proves the dispatch is live; the
   per-module 0-ULP tests establish the underlying fidelity.
 
+## The edge-polygon narrow-phase (shipped)
+
+`gbCollideEdgeAndPolygon` in `gb_collision.cuh` ports `b2CollideEdgeAndPolygon` (the
+`b2EPCollider` class), so a ground edge against a polygon body produces a bit-exact
+manifold. It replaces the two-segment-polygon stand-in the wired step used before.
+
+- **Shape data.** `GBEdgeShape` carries the segment (vertex1, vertex2) and the optional
+  adjacent vertices (vertex0, vertex3) with their has-flags. The ground edges are single
+  segments, so both flags are false.
+- **Collide.** The port keeps the full edge-adjacency path: it classifies the edge,
+  sets the valid normal range from the adjacent vertices, computes the edge-axis and
+  polygon-axis separations, picks the primary axis with the same hysteresis as
+  `b2CollidePolygons`, clips the incident edge, and writes a face-A (edge reference) or
+  face-B (polygon reference) manifold. The manifold convention matches
+  `b2WorldManifold::Initialize`, so the existing world-manifold and solver paths consume
+  it unchanged. Keeping the adjacency logic in place means a chain shape reuses this
+  routine directly.
+- **Test.** `gb_collide_edge_polygon_test.cu` runs a box flat on a horizontal edge
+  (face-A, two points), a box on a sloped edge (face-A, two points, rotated frame), a
+  large box overhanging a short edge so the polygon face wins (face-B, one point), and a
+  separated box (no contact), and reproduces the manifold type, point count, local
+  normal, local point, both clip points, and both contact ids at 0 ULP.
+
 ## Adding the next module
 
 The same path extends the engine further.
 
-- **Edge-polygon narrow-phase.** Port `b2CollideEdgeAndPolygon` so the ground edge
-  against a polygon body is bit-exact, replacing the two-segment-polygon stand-in the
-  wired step uses now.
 - **More joint types.** The revolute motor and angle-limit rows add the 3x3 path
   (`b2Mat33::Solve22` / `Solve33`) on top of the point-to-point joint. Prismatic,
   distance, weld, and pulley each have their own `InitVelocityConstraints`,

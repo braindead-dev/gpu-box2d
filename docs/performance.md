@@ -102,9 +102,42 @@ beats both moving the parallelism inside a world (block-per-world) and paralleli
 solver itself (graph coloring). For a bit-identical Box2D port, thread-per-world is the
 right execution model, and the path to higher absolute throughput is a larger GPU.
 
+## Host benchmark
+
+`bench/gb_bench.cu` measures the same driver host-mode on a CPU, which establishes the
+per-world cost and the scaling shape without a GPU. It seeds a fixed scene per world (a
+column of eight circles and two boxes settling on a floor), steps the whole batch a
+fixed number of times, and reports batch-steps per second and world-steps per second
+across a sweep of world counts. A world-step is one `gb_world_step` (collide, solve,
+TOI) on one world.
+
+```
+CXX=clang++ ./bench/run_bench.sh
+```
+
+A representative single-core run on an Apple M-series host (200 timed steps, host build,
+one thread):
+
+| worlds | wall (s) | batch-steps/s | world-steps/s |
+|---|---|---|---|
+| 1 | 0.0012 | 164660 | 164660 |
+| 16 | 0.0181 | 11031 | 176491 |
+| 64 | 0.0569 | 3514 | 224905 |
+| 256 | 0.1952 | 1025 | 262285 |
+| 1024 | 0.8164 | 245 | 250857 |
+| 4096 | 3.5645 | 56 | 229823 |
+
+World-steps per second stays flat as the world count grows: the batch is embarrassingly
+parallel across worlds, so adding worlds adds proportional work and the per-world cost
+holds. This single-core host figure is the baseline the GPU multiplies. On the
+SoA-global path the same driver runs one world per CUDA thread across the card's lanes,
+which is where the A10 23K env-steps-per-second number above comes from. The host
+benchmark is the development-time scaling check; the definitive GPU throughput runs on
+the card.
+
 ## Reproducing
 
-The throughput numbers come from the batched launcher stepping a fixed number of worlds
-and timing the kernel, best-of over several runs on an uncontended GPU. The fidelity
-gates that must stay green alongside any performance change are in `test/run_gate.sh`
-and `docs/fidelity.md`.
+The GPU throughput numbers come from the batched launcher stepping a fixed number of
+worlds and timing the kernel, best-of over several runs on an uncontended GPU. The host
+scaling numbers come from `bench/run_bench.sh`. The fidelity gates that must stay green
+alongside any performance change are in `test/run_gate.sh` and `docs/fidelity.md`.

@@ -30,6 +30,9 @@ __pycache__/
 *.egg-info/
 *.pyc
 
+# Compiled benchmark binary
+bench/gb_bench
+
 # Scratch and editor files
 *.tmp
 *.log

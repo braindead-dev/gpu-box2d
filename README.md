@@ -139,7 +139,7 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 The shape set now spans circles, edges, and convex polygons, with circle, edge-circle, polygon-polygon, polygon-circle, and the dedicated edge-polygon narrow-phase; the contact solver covers the one-point and two-point block paths, and the joint set covers the revolute, distance, weld, and prismatic joints. The polygon narrow-phase and the revolute joint solve are wired into the assembled `gb_world_step` behind the `GB_ENABLE_POLYGONS` and `GB_ENABLE_JOINTS` build flags, so a step over a mixed scene dispatches circle, edge, and polygon contacts and runs the joint solve in island order. The forward direction widens the constraint set and the launcher while holding the bit-identical guarantee.
 
 1. A CUDA batched launcher on top of the Python binding, so the same `Batch` API a user drives on a CPU steps on the GPU through the SoA-global path. The host driver and the pybind11 module are in [bindings/](bindings/); the device upload-step-download path is the remaining piece.
-2. The remaining joint paths: the revolute motor and angle-limit rows (the 3x3 path on top of the point-to-point joint that is already in, reusing the `GBMat33` ops the weld and prismatic joints carry), and the pulley and gear joints, each on the same accessor contract with a 0-ULP micro-test.
+2. The remaining joint types: the pulley and gear joints, each on the same accessor contract with a 0-ULP micro-test, reusing the `GBMat22` and `GBMat33` ops the existing joints carry.
 3. Wiring the chain shape (`b2ChainShape`) into the assembled step as a per-world static collider. The chain's child-edge generation is validated 0-ULP and feeds the adjacency-aware edge collider; the remaining work is per-world chain storage behind the accessors and a child-edge loop in the narrow-phase.
 4. Per-point warm-start id matching for polygon contacts, so a contact whose clip features change between substeps carries impulse by matching feature id per surviving point.
 
@@ -147,12 +147,20 @@ Two earlier roadmap items are now closed findings. Making dense connected island
 
 Each new module ships a 0-ULP micro-test before it joins the assembled step. See [docs/extending.md](docs/extending.md) for the concrete path.
 
+## Examples and tools
+
+- [examples/fruit_merge/](examples/fruit_merge/): the fruit-merge game, a worked application on the contact-listener and field-hook seams.
+- [examples/box_stack/](examples/box_stack/): a tower of boxes settling, driven from Python.
+- [examples/ragdoll/](examples/ragdoll/): a jointed chain swinging under gravity, the revolute joint and polygons together, driven from Python.
+- [bindings/](bindings/): the batched-world driver and the pybind11 module, with the numpy obs/state API.
+- [bench/](bench/): the throughput benchmark and its host-mode scaling results.
+
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md): thread-per-world execution, the SoA memory layout, and the serial-solver fidelity rule.
 - [docs/fidelity.md](docs/fidelity.md): how bit-identicality is verified and what is verified.
-- [docs/performance.md](docs/performance.md): the measured throughput, the structural ceiling, GPU scaling, and the two measured-and-rejected execution models.
-- [docs/extending.md](docs/extending.md): how polygons, the two-point solver, and the revolute joint were added, and the path for the next shape, solver row, and joint type.
+- [docs/performance.md](docs/performance.md): the measured throughput, the structural ceiling, GPU scaling, the host-mode benchmark, and the two measured-and-rejected execution models.
+- [docs/extending.md](docs/extending.md): how the shapes, the two-point solver, and the joints were added, and the path for the next shape, solver row, and joint type.
 
 ## License
 

@@ -109,7 +109,7 @@ CXX=clang++ ./test/run_gate_host.sh
 
 ## Status
 
-The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, twelve micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
+The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute, distance, weld, and prismatic joints. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, twelve micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
 
 | Component | Status |
 |---|---|
@@ -160,7 +160,9 @@ Each new module ships a 0-ULP micro-test before it joins the assembled step. See
 - [docs/architecture.md](docs/architecture.md): thread-per-world execution, the SoA memory layout, and the serial-solver fidelity rule.
 - [docs/fidelity.md](docs/fidelity.md): how bit-identicality is verified and what is verified.
 - [docs/performance.md](docs/performance.md): the measured throughput, the structural ceiling, GPU scaling, the host-mode benchmark, and the two measured-and-rejected execution models.
+- [docs/api.md](docs/api.md): the API reference for the C++ core, the batched driver, and the Python binding.
 - [docs/extending.md](docs/extending.md): how the shapes, the two-point solver, and the joints were added, and the path for the next shape, solver row, and joint type.
+- [CONTRIBUTING.md](CONTRIBUTING.md): the module-and-micro-test workflow, the fidelity rules, the gate, and the style and commit conventions.
 
 ## License
 

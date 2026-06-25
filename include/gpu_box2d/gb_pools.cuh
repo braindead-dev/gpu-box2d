@@ -38,6 +38,9 @@
 #ifndef GB_MAX_CONTACTS
 #define GB_MAX_CONTACTS 128
 #endif
+#ifndef GB_MAX_JOINTS
+#define GB_MAX_JOINTS   32          // revolute joints per world (with -DGB_ENABLE_JOINTS)
+#endif
 #define GB_N_EDGES      3           // static edge fixtures on the ground body
 #define GB_GROUND       0           // body slot 0 is the static ground
 
@@ -68,6 +71,19 @@ struct WorldShared {
     unsigned char awake[GB_MAX_BODIES];
     unsigned char alive[GB_MAX_BODIES];
     int    bodyCount;
+#ifdef GB_ENABLE_POLYGONS
+    // ---- polygon shape storage (opt-in via -DGB_ENABLE_POLYGONS) --------------
+    // shapeType selects the body's fixture shape: GB_SHAPE_CIRCLE (the default, 0) or
+    // GB_SHAPE_POLYGON. When polygons are disabled this whole block is absent and the
+    // struct is byte-identical to the circle-only layout, so the circle path is
+    // unchanged. Polygon vertices/normals are packed x,y interleaved per body.
+    int    shapeType[GB_MAX_BODIES];
+    int    polyCount[GB_MAX_BODIES];
+    float  polyRadius[GB_MAX_BODIES];
+    float  polyCentroidX[GB_MAX_BODIES], polyCentroidY[GB_MAX_BODIES];
+    float  polyVx[GB_MAX_BODIES*GB_MAX_POLYGON_VERTICES], polyVy[GB_MAX_BODIES*GB_MAX_POLYGON_VERTICES];
+    float  polyNx[GB_MAX_BODIES*GB_MAX_POLYGON_VERTICES], polyNy[GB_MAX_BODIES*GB_MAX_POLYGON_VERTICES];
+#endif
     // ground edge fixtures (static)
     float  edgeAx[GB_N_EDGES], edgeAy[GB_N_EDGES], edgeBx[GB_N_EDGES], edgeBy[GB_N_EDGES];
     // contacts (persistent; manifold cache + warm-start + CCD/TOI)
@@ -87,6 +103,17 @@ struct WorldShared {
     int    cToiCount[GB_MAX_CONTACTS];
     unsigned char cToiFlag[GB_MAX_CONTACTS], cEnabled[GB_MAX_CONTACTS];
     int    contactCount;
+#ifdef GB_ENABLE_JOINTS
+    // ---- revolute joint pool (opt-in via -DGB_ENABLE_JOINTS) ------------------
+    // A revolute joint pins jBodyA and jBodyB at a shared world anchor. Anchors are
+    // body-local; jImpulse carries the warm-start impulse across substeps. When joints
+    // are disabled this block is absent and the layout is unchanged.
+    int    jBodyA[GB_MAX_JOINTS], jBodyB[GB_MAX_JOINTS];
+    float  jLocalAnchorAX[GB_MAX_JOINTS], jLocalAnchorAY[GB_MAX_JOINTS];
+    float  jLocalAnchorBX[GB_MAX_JOINTS], jLocalAnchorBY[GB_MAX_JOINTS];
+    float  jImpulseX[GB_MAX_JOINTS], jImpulseY[GB_MAX_JOINTS];
+    int    jointCount;
+#endif
     // physics scalars
     unsigned char stepComplete;
     // ---- application extension hook --------------------------------------
@@ -133,6 +160,7 @@ struct WorldPools {
   #define BODY(w, field, s)  ((w).field[(s)])     // body field at slot s
   #define CONT(w, field, c)  ((w).field[(c)])     // contact field at index c
   #define EDGE(w, field, e)  ((w).field[(e)])     // ground edge field
+  #define JOINT(w, field, j) ((w).field[(j)])     // joint field at slot j
   #define SCAL(w, field)     ((w).field)          // per-world scalar
 #endif
 
@@ -141,6 +169,26 @@ struct WorldPools {
 // through this accessor. An application sets BODY(w,radius,s) at body creation.
 // Edge fixtures use GB_POLYGON_RADIUS.
 GB_HD inline float gbCircleRadius(GBWorld& w, int s){ return BODY(w, radius, s); }
+
+// ---- body shape-type accessor -----------------------------------------------
+// A body's fixture shape: GB_SHAPE_CIRCLE or GB_SHAPE_POLYGON. With polygons
+// disabled every body is a circle and this returns GB_SHAPE_CIRCLE with no field
+// read, so the circle-only path compiles and runs identically.
+GB_HD inline int gbBodyShape(GBWorld& w, int s){
+#ifdef GB_ENABLE_POLYGONS
+    return BODY(w, shapeType, s);
+#else
+    (void)w; (void)s; return GB_SHAPE_CIRCLE;
+#endif
+}
+
+#ifdef GB_ENABLE_POLYGONS
+// Flat slot for a body's vertex array entry: body*GB_MAX_POLYGON_VERTICES + vert.
+// Indexed through the same BODY accessor, so it coalesces under the SoA backend.
+GB_HD inline int gbPolyVertSlot(int body, int vert){
+    return body * GB_MAX_POLYGON_VERTICES + vert;
+}
+#endif
 
 // Shared-memory budget: WorldShared must fit the per-block shared arena. The
 // 48 KB default holds it with headroom; sm_86 offers a 100 KB opt-in for larger

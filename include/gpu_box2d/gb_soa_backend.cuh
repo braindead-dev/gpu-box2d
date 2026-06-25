@@ -31,6 +31,18 @@ struct WorldPoolsSoA {
     unsigned char* awake;   // [ MAX*NW ], body
     unsigned char* alive;   // [ MAX*NW ], body
     int* bodyCount;   // [ NW ], scalar
+#ifdef GB_ENABLE_POLYGONS
+    // polygon shape storage (opt-in mirror of the WorldShared block).
+    int* shapeType;   // [ MAX*NW ], body
+    int* polyCount;   // [ MAX*NW ], body
+    float* polyRadius;   // [ MAX*NW ], body
+    float* polyCentroidX;   // [ MAX*NW ], body
+    float* polyCentroidY;   // [ MAX*NW ], body
+    float* polyVx;   // [ MAX*VERTS*NW ], body-vertex
+    float* polyVy;   // [ MAX*VERTS*NW ], body-vertex
+    float* polyNx;   // [ MAX*VERTS*NW ], body-vertex
+    float* polyNy;   // [ MAX*VERTS*NW ], body-vertex
+#endif
     float* edgeAx;   // [ MAX*NW ], edge
     float* edgeAy;   // [ MAX*NW ], edge
     float* edgeBx;   // [ MAX*NW ], edge
@@ -60,6 +72,18 @@ struct WorldPoolsSoA {
     unsigned char* cToiFlag;   // [ MAX*NW ], cont
     unsigned char* cEnabled;   // [ MAX*NW ], cont
     int* contactCount;   // [ NW ], scalar
+#ifdef GB_ENABLE_JOINTS
+    // revolute joint pool (opt-in mirror).
+    int* jBodyA;   // [ MAXJ*NW ], joint
+    int* jBodyB;   // [ MAXJ*NW ], joint
+    float* jLocalAnchorAX;   // [ MAXJ*NW ], joint
+    float* jLocalAnchorAY;   // [ MAXJ*NW ], joint
+    float* jLocalAnchorBX;   // [ MAXJ*NW ], joint
+    float* jLocalAnchorBY;   // [ MAXJ*NW ], joint
+    float* jImpulseX;   // [ MAXJ*NW ], joint
+    float* jImpulseY;   // [ MAXJ*NW ], joint
+    int* jointCount;   // [ NW ], scalar
+#endif
     unsigned char* stepComplete;   // [ NW ], scalar
     // ---- application extension hook (mirror of GB_WORLD_USER_FIELDS) ----------
     // An application injects a transposed pointer for each field it added to
@@ -77,4 +101,5 @@ struct GBWorld { WorldPoolsSoA* p; int world; };
 #define BODY(w, field, s)  ((w).p->field[GBIDX(w,s)])
 #define CONT(w, field, c)  ((w).p->field[GBIDX(w,c)])
 #define EDGE(w, field, e)  ((w).p->field[GBIDX(w,e)])
+#define JOINT(w, field, j) ((w).p->field[GBIDX(w,j)])
 #define SCAL(w, field)     ((w).p->field[(w).world])

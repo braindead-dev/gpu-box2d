@@ -22,6 +22,9 @@
 #include "gb_math.cuh"
 #include "gb_contact_types.cuh"     // shared types + phase-function contract
 #include "gb_contact_solver.cuh"    // the per-iteration Gauss-Seidel phases
+#ifdef GB_ENABLE_JOINTS
+#include "gb_joint.cuh"             // revolute joint phases (opt-in)
+#endif
 
 // ============================================================================
 // b2Island::Solve, faithful (single-point contacts only). Lane 0, serial in order.
@@ -63,8 +66,16 @@ GB_HD inline void gbIslandSolve(GBWorld& w, GBIslandData& isl, bool allowSleep){
         int ia=-1, ib=-1;
         for (int k=0;k<bc;++k){ if(isl.bodies[k]==bodyA) ia=k; if(isl.bodies[k]==bodyB) ib=k; }
         float radiusA, radiusB;
+#ifdef GB_ENABLE_POLYGONS
+        // shape-aware skin radius: a polygon fixture uses GB_POLYGON_RADIUS, a circle
+        // uses its m_radius, and the ground edge uses GB_POLYGON_RADIUS.
+        radiusB = gbBodyShape(w,bodyB)==GB_SHAPE_POLYGON ? GB_POLYGON_RADIUS : gbCircleRadius(w,bodyB);
+        if (edge < 0) radiusA = gbBodyShape(w,bodyA)==GB_SHAPE_POLYGON ? GB_POLYGON_RADIUS : gbCircleRadius(w,bodyA);
+        else          radiusA = GB_POLYGON_RADIUS;
+#else
         if (edge < 0){ radiusA = gbCircleRadius(w,bodyA); radiusB = gbCircleRadius(w,bodyB); }
         else         { radiusA = GB_POLYGON_RADIUS;       radiusB = gbCircleRadius(w,bodyB); }
+#endif
 
         vc.friction = CONT(w, cFriction, ci); vc.restitution = CONT(w, cRestitution, ci);
         vc.indexA = ia; vc.indexB = ib;
@@ -98,12 +109,46 @@ GB_HD inline void gbIslandSolve(GBWorld& w, GBIslandData& isl, bool allowSleep){
         pc.type=CONT(w, cManifoldType, ci); pc.radiusA=radiusA; pc.radiusB=radiusB;
     }
 
+#ifdef GB_ENABLE_JOINTS
+    // ---- Load joint constraints (island-local scratch from the joint pool) ---
+    int jc = isl.jointCount;
+    for (int i = 0; i < jc; ++i){
+        int ji = isl.joints[i];
+        GBRevoluteJoint& jn = isl.jnt[i];
+        int bodyA = JOINT(w, jBodyA, ji), bodyB = JOINT(w, jBodyB, ji);
+        int ia=-1, ib=-1;
+        for (int k=0;k<bc;++k){ if(isl.bodies[k]==bodyA) ia=k; if(isl.bodies[k]==bodyB) ib=k; }
+        jn.indexA=ia; jn.indexB=ib; jn.jointIdx=ji;
+        jn.localAnchorA=v2(JOINT(w, jLocalAnchorAX, ji), JOINT(w, jLocalAnchorAY, ji));
+        jn.localAnchorB=v2(JOINT(w, jLocalAnchorBX, ji), JOINT(w, jLocalAnchorBY, ji));
+        jn.invMassA=BODY(w, invMass, bodyA); jn.invMassB=BODY(w, invMass, bodyB);
+        jn.invIA=BODY(w, invI, bodyA);       jn.invIB=BODY(w, invI, bodyB);
+        jn.impulse=v2(JOINT(w, jImpulseX, ji), JOINT(w, jImpulseY, ji));   // dtRatio==1
+    }
+#endif
+
     // ---- serial solver spine (lane 0) --------------------------------------
+    // b2Island::Solve order: init contacts, warm-start contacts, init joints; then
+    // each velocity iteration solves joints first (joint-list order) then contacts.
     gbInitVelocityConstraints(w, isl);                       // position-dependent portions
     gbWarmStart(isl);                                        // apply carried impulse
-    for (int it = 0; it < GB_VELOCITY_ITERS; ++it)           // 8 Gauss-Seidel velocity iters
+#ifdef GB_ENABLE_JOINTS
+    for (int i = 0; i < jc; ++i) gbRevoluteInitVelocity(isl.jnt[i], isl);
+#endif
+    for (int it = 0; it < GB_VELOCITY_ITERS; ++it){          // 8 Gauss-Seidel velocity iters
+#ifdef GB_ENABLE_JOINTS
+        for (int i = 0; i < jc; ++i) gbRevoluteSolveVelocity(isl.jnt[i], isl);
+#endif
         gbSolveVelocity(isl);
+    }
     gbStoreImpulses(w, isl);                                 // carry warm-start to next substep
+#ifdef GB_ENABLE_JOINTS
+    for (int i = 0; i < jc; ++i){                            // store joint warm-start impulse
+        int ji = isl.jnt[i].jointIdx;
+        JOINT(w, jImpulseX, ji) = isl.jnt[i].impulse.x;
+        JOINT(w, jImpulseY, ji) = isl.jnt[i].impulse.y;
+    }
+#endif
 
     // ---- Integrate positions ------------------------------------------------
     for (int i = 0; i < bc; ++i){
@@ -129,7 +174,16 @@ GB_HD inline void gbIslandSolve(GBWorld& w, GBIslandData& isl, bool allowSleep){
     bool positionSolved = false;
     for (int it = 0; it < GB_POSITION_ITERS; ++it){
         bool contactsOkay = gbSolvePosition(isl);
+#ifdef GB_ENABLE_JOINTS
+        // b2Island::Solve: solve joints' position after contacts, in joint-list order,
+        // and exit only when both are within tolerance.
+        bool jointsOkay = true;
+        for (int i = 0; i < jc; ++i)
+            jointsOkay = gbRevoluteSolvePosition(isl.jnt[i], isl) && jointsOkay;
+        if (contactsOkay && jointsOkay){ positionSolved = true; break; }
+#else
         if (contactsOkay){ positionSolved = true; break; }
+#endif
     }
 
     // ---- Copy state back to bodies + SynchronizeTransform -------------------
@@ -180,6 +234,10 @@ GB_HD inline void gbWorldSolve(GBWorld& w){
     unsigned char contactInIsland[GB_MAX_CONTACTS];
     for (int i=0;i<SCAL(w, bodyCount);++i) bodyInIsland[i]=0;
     for (int i=0;i<SCAL(w, contactCount);++i) contactInIsland[i]=0;
+#ifdef GB_ENABLE_JOINTS
+    unsigned char jointInIsland[GB_MAX_JOINTS];
+    for (int i=0;i<SCAL(w, jointCount);++i) jointInIsland[i]=0;
+#endif
 
     int stack[GB_MAX_BODIES]; // DFS stack of body slots
     GBIslandData isl;
@@ -193,6 +251,9 @@ GB_HD inline void gbWorldSolve(GBWorld& w){
 
         // reset island
         isl.bodyCount=0; isl.contactCount=0;
+#ifdef GB_ENABLE_JOINTS
+        isl.jointCount=0;
+#endif
         int sc=0; stack[sc++]=seed; bodyInIsland[seed]=1;
 
         while (sc > 0){
@@ -217,6 +278,20 @@ GB_HD inline void gbWorldSolve(GBWorld& w){
                 if (bodyInIsland[other]) continue;
                 stack[sc++]=other; bodyInIsland[other]=1;
             }
+#ifdef GB_ENABLE_JOINTS
+            // search joints connected to b in reverse creation order (b2World::Solve
+            // walks the joint edge list after the contact edge list).
+            for (int ji = SCAL(w, jointCount)-1; ji >= 0; --ji){
+                if (jointInIsland[ji]) continue;
+                int ja=JOINT(w, jBodyA, ji), jb=JOINT(w, jBodyB, ji);
+                if (ja != b && jb != b) continue;
+                isl.joints[isl.jointCount++] = ji;
+                jointInIsland[ji]=1;
+                int other = (ja==b)? jb : ja;
+                if (bodyInIsland[other]) continue;
+                stack[sc++]=other; bodyInIsland[other]=1;
+            }
+#endif
         }
 
 #if defined(B2_GPU_DUMP) && !defined(__CUDA_ARCH__)

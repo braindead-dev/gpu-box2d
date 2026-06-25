@@ -44,7 +44,19 @@
 #endif
 
 // ---- fat-AABB helpers (brute-force broad-phase, fat-AABB-equivalent to the tree) --
+// Body AABB: a circle uses center +/- radius; a polygon uses the rotated-vertex bound.
+// The function keeps the name gbCircleAABB for call-site stability; with polygons
+// disabled it is the original circle-only computation byte-for-byte.
 GB_HD inline void gbCircleAABB(GBWorld& w, int i, float& lo_x, float& lo_y, float& hi_x, float& hi_y){
+#ifdef GB_ENABLE_POLYGONS
+    if (gbBodyShape(w, i) == GB_SHAPE_POLYGON){
+        GBPolygon p; gbLoadPolygon(w, i, p);
+        V2 lower, upper; gbPolygonComputeAABB(p, gbBodyXf(w, i), lower, upper);
+        lo_x=lower.x-GB_AABB_EXTENSION; lo_y=lower.y-GB_AABB_EXTENSION;
+        hi_x=upper.x+GB_AABB_EXTENSION; hi_y=upper.y+GB_AABB_EXTENSION;
+        return;
+    }
+#endif
     float r = gbCircleRadius(w, i);
     float cx = BODY(w,sweepCx,i), cy = BODY(w,sweepCy,i);
     lo_x=cx-r-GB_AABB_EXTENSION; lo_y=cy-r-GB_AABB_EXTENSION;

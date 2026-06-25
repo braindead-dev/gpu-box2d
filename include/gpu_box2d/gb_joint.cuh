@@ -33,18 +33,10 @@ GB_HD inline V2 gbMat22Solve(const GBMat22& K, V2 b){
     return v2(det*(a22*b.x - a12*b.y), det*(a11*b.y - a21*b.x));
 }
 
-// One revolute joint, point-to-point. Anchors are body-local; localCenter is 0 in the
-// gb_* body model (the same assumption the contact solver makes), so the world anchor
-// arm is rA = Rot(aA) * localAnchorA.
-struct GBRevoluteJoint {
-    int indexA, indexB;            // island-local body indices
-    V2  localAnchorA, localAnchorB;
-    float invMassA, invMassB, invIA, invIB;
-    // solver scratch (set by InitVelocityConstraints):
-    V2  rA, rB;
-    GBMat22 mass;                  // 2x2 point-to-point effective mass
-    V2  impulse;                   // accumulated point-to-point impulse (warm-start)
-};
+// GBRevoluteJoint is defined in gb_contact_types.cuh so the per-island scratch can
+// carry an array of joints. The phases below operate on it. Anchors are body-local;
+// localCenter is 0 in the gb_* body model, so the world anchor arm is
+// rA = Rot(aA) * localAnchorA.
 
 // b2RevoluteJoint::InitVelocityConstraints (point-to-point). Builds rA/rB and the 2x2
 // mass matrix, then applies the warm-start impulse to the island velocity buffers.

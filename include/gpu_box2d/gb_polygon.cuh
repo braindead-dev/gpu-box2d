@@ -10,13 +10,8 @@
 // Build flags (FROZEN): nvcc --fmad=false -prec-div=true -prec-sqrt=true (mirrors
 // the CPU's -ffp-contract=off -mfpmath=sse). Changing these breaks bit-identicality.
 #pragma once
-#include "gb_settings.cuh"
+#include "gb_settings.cuh"   // GB_MAX_POLYGON_VERTICES (b2_maxPolygonVertices)
 #include "gb_math.cuh"
-
-// Box2D b2_maxPolygonVertices. A polygon holds up to this many hull vertices.
-#ifndef GB_MAX_POLYGON_VERTICES
-#define GB_MAX_POLYGON_VERTICES 8
-#endif
 
 // A convex polygon shape. m_radius is the polytope skin (b2_polygonRadius for a
 // shape built the standard way). Vertices wind counter-clockwise; normal i is the

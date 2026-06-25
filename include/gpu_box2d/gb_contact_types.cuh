@@ -63,6 +63,20 @@ struct GBConstraint {
     int   type; float radiusA, radiusB;
 };
 
+// ---- revolute joint, point-to-point (the solver phases live in gb_joint.cuh) ----
+// The struct lives here so the island scratch can carry an array of joints. Anchors
+// are body-local; localCenter is 0 in the gb_* body model, so the world anchor arm is
+// rA = Rot(aA) * localAnchorA.
+struct GBRevoluteJoint {
+    int indexA, indexB;            // island-local body indices
+    V2  localAnchorA, localAnchorB;
+    float invMassA, invMassB, invIA, invIB;
+    int jointIdx;                  // global joint slot (impulse store-back)
+    V2  rA, rB;                    // solver arms (set by InitVelocityConstraints)
+    GBMat22 mass;                  // 2x2 point-to-point effective mass
+    V2  impulse;                   // accumulated point-to-point impulse (warm-start)
+};
+
 // ---- per-island solve scratch (lives in shared memory in the block model) ------
 struct GBIslandData {
     int        bodies[GB_MAX_BODIES];     // global body slots, island order
@@ -71,6 +85,11 @@ struct GBIslandData {
     V2         posC[GB_MAX_BODIES];  float posA[GB_MAX_BODIES];
     V2         vel[GB_MAX_BODIES];   float velW[GB_MAX_BODIES];
     GBConstraint con[GB_MAX_CONTACTS];    // fused vel+pos constraints
+#ifdef GB_ENABLE_JOINTS
+    int          joints[GB_MAX_JOINTS];   // global joint slots, island order
+    int          jointCount;
+    GBRevoluteJoint jnt[GB_MAX_JOINTS];   // island-local joint scratch
+#endif
 };
 
 // ============================================================================

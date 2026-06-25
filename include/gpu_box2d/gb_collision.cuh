@@ -380,6 +380,36 @@ GB_HD inline Xf gbBodyXf(GBWorld& w, int i){
     return t;
 }
 
+#ifdef GB_ENABLE_POLYGONS
+// Read a body's polygon shape from the per-body polygon storage into a GBPolygon,
+// all through the accessor contract. Only called when gbBodyShape(w,s) is
+// GB_SHAPE_POLYGON.
+GB_HD inline void gbLoadPolygon(GBWorld& w, int s, GBPolygon& p){
+    p.count  = BODY(w, polyCount, s);
+    p.radius = BODY(w, polyRadius, s);
+    p.centroid = v2(BODY(w, polyCentroidX, s), BODY(w, polyCentroidY, s));
+    for (int i = 0; i < p.count; ++i){
+        int vs = gbPolyVertSlot(s, i);
+        p.vertices[i] = v2(BODY(w, polyVx, vs), BODY(w, polyVy, vs));
+        p.normals[i]  = v2(BODY(w, polyNx, vs), BODY(w, polyNy, vs));
+    }
+}
+
+// An edge as a degenerate two-vertex polygon, so the polygon-polygon narrow-phase
+// can collide a ground edge against a polygon body. The two normals point to either
+// side of the segment, matching how Box2D treats an edge in b2CollideEdgeAndPolygon's
+// face setup for the single-segment case.
+GB_HD inline void gbEdgeAsPolygon(V2 A, V2 B, float edgeR, GBPolygon& p){
+    p.count = 2;
+    p.radius = edgeR;
+    p.vertices[0] = A; p.vertices[1] = B;
+    V2 e = B - A; b2Normalize(e);
+    V2 n = v2(e.y, -e.x);
+    p.normals[0] = n; p.normals[1] = -n;
+    p.centroid = 0.5f*(A + B);
+}
+#endif
+
 // gbContactUpdate. b2Contact::Update (b2Contact.cpp:161), 1-point path, on the
 // accessor contract. Runs the narrow-phase for contact slot ci, sets enabled, caches
 // the manifold, carries warm-start impulses, and flips cTouching.
@@ -401,11 +431,51 @@ GB_HD inline void gbOnTouchBegin(GBWorld&, int, int){}
 GB_HD inline void gbOnTouchEnd(GBWorld&, int, int){}
 #endif
 
-GB_HD inline void gbContactUpdate(GBWorld& w, int ci){
-    CONT(w, cEnabled, ci) = 1;   // b2Contact::Update: m_flags |= e_enabledFlag
-    bool wasTouching = CONT(w, cTouching, ci) != 0;
-    int bodyA = CONT(w, cBodyA, ci), bodyB = CONT(w, cBodyB, ci), edge = CONT(w, cEdge, ci);
-    GBManifold m; m.pointCount = 0;
+// Run the narrow-phase for contact slot ci, choosing the manifold function from the
+// fixture shapes. The circle-only build compiles the circle and edge cases alone, so
+// the manifold it produces is byte-identical to the circle-only path.
+GB_HD inline void gbNarrowPhase(GBWorld& w, int bodyA, int bodyB, int edge, GBManifold& m){
+    m.pointCount = 0;
+#ifdef GB_ENABLE_POLYGONS
+    int shapeB = gbBodyShape(w, bodyB);
+    if (edge < 0){
+        int shapeA = gbBodyShape(w, bodyA);
+        if (shapeA == GB_SHAPE_POLYGON && shapeB == GB_SHAPE_POLYGON){
+            GBPolygon pA, pB; gbLoadPolygon(w, bodyA, pA); gbLoadPolygon(w, bodyB, pB);
+            gbCollidePolygons(m, pA, gbBodyXf(w, bodyA), pB, gbBodyXf(w, bodyB));
+        } else if (shapeA == GB_SHAPE_POLYGON){
+            // polygon (A) vs circle (B): b2CollidePolygonAndCircle, polygon = fixtureA
+            GBPolygon pA; gbLoadPolygon(w, bodyA, pA);
+            gbCollidePolygonAndCircle(m, pA, gbBodyXf(w, bodyA),
+                                      gbCircleRadius(w, bodyB), gbBodyXf(w, bodyB));
+        } else if (shapeB == GB_SHAPE_POLYGON){
+            // circle (A) vs polygon (B): polygon is fixtureA in Box2D's registry, so
+            // the contact is (polygon=bodyB, circle=bodyA) with the key swapped by the
+            // contact-creation order. Here bodyA is the circle, so collide with the
+            // polygon as the reference and the manifold normal already points A to B.
+            GBPolygon pB; gbLoadPolygon(w, bodyB, pB);
+            gbCollidePolygonAndCircle(m, pB, gbBodyXf(w, bodyB),
+                                      gbCircleRadius(w, bodyA), gbBodyXf(w, bodyA));
+            if (m.pointCount > 0) m.type = GB_MANIFOLD_FACE_B;   // reference face on B
+        } else {
+            float rA = gbCircleRadius(w, bodyA), rB = gbCircleRadius(w, bodyB);
+            gbCollideCircles(m, rA, gbBodyXf(w, bodyA), rB, gbBodyXf(w, bodyB));
+        }
+    } else {
+        V2 A = v2(EDGE(w, edgeAx, edge), EDGE(w, edgeAy, edge));
+        V2 B = v2(EDGE(w, edgeBx, edge), EDGE(w, edgeBy, edge));
+        if (shapeB == GB_SHAPE_POLYGON){
+            // edge (A) vs polygon (B): the edge is the reference, modeled as a
+            // two-vertex polygon so b2CollidePolygons drives the clip.
+            GBPolygon eA; gbEdgeAsPolygon(A, B, GB_POLYGON_RADIUS, eA);
+            GBPolygon pB; gbLoadPolygon(w, bodyB, pB);
+            gbCollidePolygons(m, eA, gbBodyXf(w, bodyA), pB, gbBodyXf(w, bodyB));
+        } else {
+            gbCollideEdgeAndCircle(m, A, B, GB_POLYGON_RADIUS, gbCircleRadius(w, bodyB),
+                                   gbBodyXf(w, bodyA), gbBodyXf(w, bodyB));
+        }
+    }
+#else
     if (edge < 0){
         // circle-circle: fixtureA = bodyA's circle, fixtureB = bodyB's circle
         float rA = gbCircleRadius(w, bodyA), rB = gbCircleRadius(w, bodyB);
@@ -418,15 +488,28 @@ GB_HD inline void gbContactUpdate(GBWorld& w, int ci){
         gbCollideEdgeAndCircle(m, A, B, GB_POLYGON_RADIUS, circR,
                                gbBodyXf(w, bodyA), gbBodyXf(w, bodyB));
     }
+#endif
+}
+
+GB_HD inline void gbContactUpdate(GBWorld& w, int ci){
+    CONT(w, cEnabled, ci) = 1;   // b2Contact::Update: m_flags |= e_enabledFlag
+    bool wasTouching = CONT(w, cTouching, ci) != 0;
+    int bodyA = CONT(w, cBodyA, ci), bodyB = CONT(w, cBodyB, ci), edge = CONT(w, cEdge, ci);
+    GBManifold m; m.pointCount = 0;
+    gbNarrowPhase(w, bodyA, bodyB, edge, m);
     bool touching = m.pointCount > 0;
-    // warm-start id carry: all our manifolds have id.key == 0, so a surviving
-    // touching contact keeps its impulse; a non-touching one resets to 0 anyway.
+    // warm-start id carry: a surviving touching contact keeps its impulse; a
+    // non-touching one resets to 0. (Circle and edge manifolds have id 0; polygon
+    // manifolds carry feature ids, which a later refinement can match per point.)
     if (touching){
         CONT(w, cManifoldType, ci) = m.type;
-        CONT(w, cPointCount, ci) = m.pointCount;   // 1 for the circle and edge paths
+        CONT(w, cPointCount, ci) = m.pointCount;
         CONT(w, cLocalNormalX, ci) = m.localNormal.x; CONT(w, cLocalNormalY, ci) = m.localNormal.y;
         CONT(w, cLocalPointX,  ci) = m.localPoint.x;  CONT(w, cLocalPointY,  ci) = m.localPoint.y;
         CONT(w, cPointLocalX,  ci) = m.pLocalPoint.x; CONT(w, cPointLocalY,  ci) = m.pLocalPoint.y;
+        if (m.pointCount > 1){
+            CONT(w, cPointLocal2X, ci) = m.pLocalPoint2.x; CONT(w, cPointLocal2Y, ci) = m.pLocalPoint2.y;
+        }
         // impulse carries from previous substep (cNormalImpulse/cTangentImpulse
         // are left intact since id.key matches). On first-touch they are 0.
     } else {

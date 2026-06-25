@@ -56,3 +56,8 @@
 
 // ---- manifold capacity (b2_maxManifoldPoints) ----
 #define GB_MAX_MANIFOLD_POINTS   2
+
+// ---- polygon capacity (b2_maxPolygonVertices) ----
+#ifndef GB_MAX_POLYGON_VERTICES
+#define GB_MAX_POLYGON_VERTICES  8
+#endif

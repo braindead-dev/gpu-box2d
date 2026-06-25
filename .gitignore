@@ -14,6 +14,7 @@ test/gb_island_test
 test/gb_collision_test
 test/gb_math_test
 test/*_test
+test/*_test_host
 !test/*_test.cu
 
 # CUDA / nvcc intermediates

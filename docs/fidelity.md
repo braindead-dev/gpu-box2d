@@ -144,3 +144,40 @@ cmake -S . -B build -DCMAKE_CUDA_ARCHITECTURES=86
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
+
+## Gate status
+
+The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
+flags, `test/run_gate.sh` reports five green micro-tests and zero red:
+
+```
+GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
+GREEN  gb_polygon (mass + polygon-polygon + polygon-circle, 0 ULP)
+GREEN  gb_block_solver (two-point LCP block solve, 0 ULP)
+GREEN  gb_joint (revolute pendulum, 0 ULP)
+GREEN  gb_wired_step (polygons + joint live in gb_world_step)
+GATE SUMMARY: 5 green, 0 red
+ALL GREEN.
+```
+
+Each new module joins the gate with its own green line, so the count grows as the
+engine grows. The broad-phase test is integer-exact (proxyId sequence and AddPair
+order); the rest assert 0 ULP against an embedded Box2D 2.3.0 reference.
+
+## Host-mode validation
+
+The micro-tests are self-contained translation units whose subject and reference math
+is `__host__ __device__`, so each one also builds and runs on a CPU with a host C++
+compiler. This is the development path and it confirms algorithmic correctness on any
+machine:
+
+```
+clang++ -O2 -x c++ -Iinclude -Itest test/gb_joint_test.cu -o gb_joint_test && ./gb_joint_test
+```
+
+The wired-step test builds host-mode with the feature flags
+(`-DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS`). Host runs on arm64 confirm the algorithm
+and the evaluation order, since arm64 has no `-mfpmath=sse` switch; the definitive bit
+match is the x86/CUDA gate above, which holds the GPU and the CPU reference in the same
+IEEE single-precision state through the frozen flags. The two agree, so the host-mode
+run on a developer machine and the x86/CUDA gate validate the same code from two sides.

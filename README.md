@@ -85,9 +85,15 @@ The 0-ULP micro-test gate also runs from a script:
 ARCH=86 ./test/run_gate.sh
 ```
 
+The same micro-tests build and run host-mode on a CPU, which is the development path and needs no GPU:
+
+```
+CXX=clang++ ./test/run_gate_host.sh
+```
+
 ## Status
 
-The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate.
+The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, five micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
 
 | Component | Status |
 |---|---|
@@ -104,6 +110,7 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Thread-per-world SoA execution (production path) | validated, about 23K env-steps/s on an A10 |
 | Block-per-world shared-memory execution | built and measured, slower (see performance.md) |
 | Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
+| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 5 micro-tests, 0 red |
 
 ## Roadmap
 

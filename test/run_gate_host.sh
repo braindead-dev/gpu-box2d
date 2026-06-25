@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# run_gate_host.sh. Build and run the per-module 0-ULP micro-tests on the CPU with a
+# host C++ compiler. Each micro-test is a self-contained translation unit whose subject
+# and reference math is host_device, so it runs on any machine with no GPU.
+#
+# This is the development gate. It confirms the algorithm and the evaluation order. The
+# definitive bit match is the x86/CUDA gate (run_gate.sh), which holds the GPU and the
+# CPU reference in the same IEEE single-precision state through the frozen nvcc flags.
+# On an x86 host you can add -mfpmath=sse -ffp-contract=off to match that state here too;
+# arm64 has no such switch, so an arm64 host run validates the algorithm rather than the
+# exact bits.
+#
+# Usage:
+#   ./test/run_gate_host.sh            # uses ${CXX:-c++}
+#   CXX=clang++ ./test/run_gate_host.sh
+set -u
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+INC="$ROOT/include"
+CXX="${CXX:-c++}"
+FLAGS="-O2 -x c++"
+
+PASS=0
+FAIL=0
+ok(){ echo "  GREEN  $1"; PASS=$((PASS+1)); }
+bad(){ echo "  RED    $1"; FAIL=$((FAIL+1)); }
+
+# build_run <module> <pass-grep> <extra-flags>. The source is test/<module>_test.cu.
+build_run(){
+  local mod="$1" passline="$2" extra="${3:-}"
+  local bin="$HERE/${mod}_test_host"
+  if $CXX $FLAGS $extra -I"$INC" -I"$HERE" "$HERE/${mod}_test.cu" -o "$bin" 2>/dev/null; then
+    if "$bin" 2>&1 | grep -q "$passline"; then
+      ok "$mod"
+    else
+      bad "$mod diverged"
+    fi
+  else
+    bad "$mod failed to build"
+  fi
+}
+
+echo "=== gpu-box2d host-mode micro-test gate (CXX=$CXX) ==="
+
+build_run gb_broadphase   "PASS gb_broadphase"
+build_run gb_polygon      "PASS gb_polygon"
+build_run gb_block_solver "PASS gb_block_solver"
+build_run gb_joint        "PASS gb_joint"
+build_run gb_wired_step   "PASS gb_wired_step" "-DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS"
+
+echo "================================================================"
+echo "HOST GATE SUMMARY: $PASS green, $FAIL red"
+if [ "$FAIL" -eq 0 ]; then
+  echo "ALL GREEN."
+  exit 0
+else
+  echo "GATE RED. A module diverged from the Box2D 2.3.0 reference."
+  exit 1
+fi

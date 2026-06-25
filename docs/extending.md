@@ -18,12 +18,16 @@ for them in struct size or code:
                        in the narrow-phase, the broad-phase AABB, and the solver radius
 -DGB_ENABLE_JOINTS     the per-world revolute joint pool, the joint edge walk in island
                        assembly, and the joint solve interleave
+-DGB_ENABLE_CHAIN      the per-edge chain adjacency (vertex0/vertex3 and the has-flags),
+                       so a static edge that belongs to a chain collides with its
+                       neighbors known to the edge-polygon collider
 ```
 
-With both flags off, the assembled step compiles and runs exactly as the circle-and-edge
+With all flags off, the assembled step compiles and runs exactly as the circle-and-edge
 engine, and the per-substep floats are unchanged. With a flag on, the matching storage
 appears in `WorldShared` and its SoA mirror behind the accessor macros, and the step
-dispatches the new path when a body carries that shape or the world holds a joint.
+dispatches the new path when a body carries that shape, the world holds a joint, or an
+edge carries chain adjacency.
 
 ## The two rules that never bend
 
@@ -230,6 +234,17 @@ loop. `gb_chain_shape_test.cu` reproduces the child-edge generation at 0 ULP aga
 Box2D 2.3.0 reference for an open chain and a loop, and confirms a child edge drives the
 edge-polygon collider end to end.
 
+With `-DGB_ENABLE_CHAIN` the chain is a live per-world static collider. Each static edge
+fixture carries its chain neighbors (vertex0 / vertex3 and the has-flags), so the
+edge-polygon collider sees the chain corners. `gbWorldSetChain(w, chain)` loads a chain
+into a world's edge fixtures, one child edge per slot with the adjacency filled, through
+the accessor contract. The assembled step then collides bodies against the chain child
+edges, with the adjacency keeping a body sliding across an interior chain vertex from
+catching on the corner. `gb_chain_step_test.cu` settles a box on a flat chain at the
+same height as a flat floor and catches a box in a V-shaped chain valley, both through
+`gb_world_step`. With the flag off the per-edge layout is byte-identical, so the
+non-chain path is unchanged.
+
 ## The gear joint (shipped)
 
 `gb_gear_joint.cuh` ports `b2GearJoint`, the last joint type. It couples two other
@@ -246,10 +261,12 @@ over hundreds of substeps.
 ## Adding the next module
 
 The same path extends the engine further.
-- **Per-world chain storage.** The chain shape and its child-edge generation are
-  validated standalone. Wiring a chain into the assembled step as a per-world static
-  collider adds chain vertex storage behind the accessors and a child-edge loop in the
-  narrow-phase, following the polygon storage pattern.
+
+- **Per-point warm-start id matching for polygon contacts.** A polygon contact whose
+  clip features change between substeps could carry impulse by matching the contact
+  feature id per surviving point, the warm-start refinement Box2D applies. The feature
+  ids are already produced by the narrow-phase; the remaining work is the per-point match
+  in the contact cache.
 
 ## Growing the bounds
 

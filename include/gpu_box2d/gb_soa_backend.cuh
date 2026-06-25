@@ -47,6 +47,15 @@ struct WorldPoolsSoA {
     float* edgeAy;   // [ MAX*NW ], edge
     float* edgeBx;   // [ MAX*NW ], edge
     float* edgeBy;   // [ MAX*NW ], edge
+#ifdef GB_ENABLE_CHAIN
+    // chain adjacency (opt-in mirror of the WorldShared block).
+    float* edgeV0x;   // [ MAX*NW ], edge
+    float* edgeV0y;   // [ MAX*NW ], edge
+    float* edgeV3x;   // [ MAX*NW ], edge
+    float* edgeV3y;   // [ MAX*NW ], edge
+    unsigned char* edgeHasV0;   // [ MAX*NW ], edge
+    unsigned char* edgeHasV3;   // [ MAX*NW ], edge
+#endif
     int* cBodyA;   // [ MAX*NW ], cont
     int* cBodyB;   // [ MAX*NW ], cont
     int* cEdge;   // [ MAX*NW ], cont

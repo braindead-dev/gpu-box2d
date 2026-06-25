@@ -170,6 +170,16 @@ if(GPU_BOX2D_BUILD_TESTS)
   set_tests_properties(gb_wired_step PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_wired_step")
 
+  # Chain-step integration: the chain shape wired into gb_world_step as a per-world
+  # collider. Built with the polygon and chain features enabled.
+  add_executable(gb_chain_step_test test/gb_chain_step_test.cu)
+  target_link_libraries(gb_chain_step_test PRIVATE gpu_box2d)
+  target_include_directories(gb_chain_step_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  target_compile_definitions(gb_chain_step_test PRIVATE GB_ENABLE_POLYGONS GB_ENABLE_CHAIN)
+  add_test(NAME gb_chain_step COMMAND gb_chain_step_test)
+  set_tests_properties(gb_chain_step PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_chain_step")
+
   # Batch driver (the C++ layer the Python binding wraps). Self-contained. Validates
   # the driver against the standalone step at 0 ULP and checks the physics.
   add_executable(gb_batch_test test/gb_batch_test.cu)

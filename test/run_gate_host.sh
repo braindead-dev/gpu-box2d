@@ -63,6 +63,7 @@ build_run gb_prismatic_joint     "PASS gb_prismatic_joint"
 build_run gb_pulley_joint        "PASS gb_pulley_joint"
 build_run gb_gear_joint          "PASS gb_gear_joint"
 build_run gb_wired_step          "PASS gb_wired_step" "-DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS"
+build_run gb_chain_step          "PASS gb_chain_step" "-DGB_ENABLE_POLYGONS -DGB_ENABLE_CHAIN"
 build_run gb_batch               "PASS gb_batch" "-DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS -I$ROOT/bindings"
 
 echo "================================================================"

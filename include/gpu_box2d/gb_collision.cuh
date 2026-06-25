@@ -723,12 +723,20 @@ GB_HD inline void gbNarrowPhase(GBWorld& w, int bodyA, int bodyB, int edge, GBMa
         V2 A = v2(EDGE(w, edgeAx, edge), EDGE(w, edgeAy, edge));
         V2 B = v2(EDGE(w, edgeBx, edge), EDGE(w, edgeBy, edge));
         if (shapeB == GB_SHAPE_POLYGON){
-            // edge (A) vs polygon (B): the dedicated b2CollideEdgeAndPolygon. The
-            // ground edges are single segments, so vertex0/vertex3 are absent and the
-            // adjacency logic reduces to the front/back face test.
+            // edge (A) vs polygon (B): the dedicated b2CollideEdgeAndPolygon. A flat
+            // ground edge is a single segment (no adjacency); a chain edge carries its
+            // neighbors so the adjacency path activates.
             GBEdgeShape eA;
-            eA.vertex1 = A; eA.vertex2 = B; eA.vertex0 = v2(0,0); eA.vertex3 = v2(0,0);
+            eA.vertex1 = A; eA.vertex2 = B;
+#ifdef GB_ENABLE_CHAIN
+            eA.vertex0 = v2(EDGE(w, edgeV0x, edge), EDGE(w, edgeV0y, edge));
+            eA.vertex3 = v2(EDGE(w, edgeV3x, edge), EDGE(w, edgeV3y, edge));
+            eA.hasVertex0 = EDGE(w, edgeHasV0, edge) != 0;
+            eA.hasVertex3 = EDGE(w, edgeHasV3, edge) != 0;
+#else
+            eA.vertex0 = v2(0,0); eA.vertex3 = v2(0,0);
             eA.hasVertex0 = false; eA.hasVertex3 = false;
+#endif
             GBPolygon pB; gbLoadPolygon(w, bodyB, pB);
             gbCollideEdgeAndPolygon(m, eA, gbBodyXf(w, bodyA), pB, gbBodyXf(w, bodyB));
         } else {

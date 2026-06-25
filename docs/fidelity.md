@@ -190,7 +190,7 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports fourteen green micro-tests and zero red:
+flags, `test/run_gate.sh` reports fifteen green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
@@ -206,8 +206,9 @@ GREEN  gb_prismatic_joint (free + limit + motor, 0 ULP)
 GREEN  gb_pulley_joint (two-body pulley, 0 ULP)
 GREEN  gb_gear_joint (revolute-revolute gear, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
+GREEN  gb_chain_step (chain live in gb_world_step)
 GREEN  gb_batch (batched driver matches standalone step, 0 ULP)
-GATE SUMMARY: 14 green, 0 red
+GATE SUMMARY: 15 green, 0 red
 ALL GREEN.
 ```
 

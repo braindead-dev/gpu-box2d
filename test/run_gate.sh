@@ -179,6 +179,18 @@ else
   bad "gb_wired_step failed to build"
 fi
 
+# Chain-step integration: the chain shape wired into gb_world_step as a per-world
+# collider (built with the polygon and chain features on).
+if nvcc $FLAGS -DGB_ENABLE_POLYGONS -DGB_ENABLE_CHAIN -I"$INC" -I"$HERE" "$HERE/gb_chain_step_test.cu" -o "$HERE/gb_chain_step_test" 2>/dev/null; then
+  if "$HERE/gb_chain_step_test" 2>&1 | grep -q "PASS gb_chain_step"; then
+    ok "gb_chain_step (chain live in gb_world_step)"
+  else
+    bad "gb_chain_step diverged"
+  fi
+else
+  bad "gb_chain_step failed to build"
+fi
+
 # Batch driver (the C++ layer the Python binding wraps): self-contained. Validates the
 # driver produces correct physics and is bit-identical to the standalone step.
 if nvcc $FLAGS -DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS -I"$INC" -I"$ROOT/bindings" -I"$HERE" "$HERE/gb_batch_test.cu" -o "$HERE/gb_batch_test" 2>/dev/null; then

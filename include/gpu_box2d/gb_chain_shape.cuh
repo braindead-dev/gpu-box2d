@@ -86,3 +86,34 @@ GB_HD inline void gbChainGetChildEdge(const GBChainShape& c, GBEdgeShape& edge, 
 
 // Number of child edges in a chain (count - 1).
 GB_HD inline int gbChainChildCount(const GBChainShape& c){ return c.count - 1; }
+
+#ifdef GB_ENABLE_CHAIN
+// Load a chain into a world's static edge fixtures, one child edge per edge slot, with
+// the adjacency carried so the edge-polygon collider sees the chain corners. The chain
+// fills up to GB_N_EDGES child edges (the per-world edge capacity); a longer chain is
+// truncated to that many edges. Unused edge slots collapse to a point so they create no
+// spurious contacts. Returns the number of child edges written. Writes through the
+// accessor contract, so it works on both memory backends.
+GB_HD inline int gbWorldSetChain(GBWorld& w, const GBChainShape& c){
+    int n = gbChainChildCount(c);
+    if (n > GB_N_EDGES) n = GB_N_EDGES;
+    for (int e = 0; e < n; ++e){
+        GBEdgeShape ce; gbChainGetChildEdge(c, ce, e);
+        EDGE(w, edgeAx, e) = ce.vertex1.x; EDGE(w, edgeAy, e) = ce.vertex1.y;
+        EDGE(w, edgeBx, e) = ce.vertex2.x; EDGE(w, edgeBy, e) = ce.vertex2.y;
+        EDGE(w, edgeV0x, e) = ce.vertex0.x; EDGE(w, edgeV0y, e) = ce.vertex0.y;
+        EDGE(w, edgeV3x, e) = ce.vertex3.x; EDGE(w, edgeV3y, e) = ce.vertex3.y;
+        EDGE(w, edgeHasV0, e) = ce.hasVertex0 ? 1 : 0;
+        EDGE(w, edgeHasV3, e) = ce.hasVertex3 ? 1 : 0;
+    }
+    // collapse the unused edge slots to a point at the origin
+    for (int e = n; e < GB_N_EDGES; ++e){
+        EDGE(w, edgeAx, e) = 0.0f; EDGE(w, edgeAy, e) = 0.0f;
+        EDGE(w, edgeBx, e) = 0.0f; EDGE(w, edgeBy, e) = 0.0f;
+        EDGE(w, edgeV0x, e) = 0.0f; EDGE(w, edgeV0y, e) = 0.0f;
+        EDGE(w, edgeV3x, e) = 0.0f; EDGE(w, edgeV3y, e) = 0.0f;
+        EDGE(w, edgeHasV0, e) = 0; EDGE(w, edgeHasV3, e) = 0;
+    }
+    return n;
+}
+#endif

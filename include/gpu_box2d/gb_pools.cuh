@@ -86,6 +86,17 @@ struct WorldShared {
 #endif
     // ground edge fixtures (static)
     float  edgeAx[GB_N_EDGES], edgeAy[GB_N_EDGES], edgeBx[GB_N_EDGES], edgeBy[GB_N_EDGES];
+#ifdef GB_ENABLE_CHAIN
+    // ---- chain adjacency (opt-in via -DGB_ENABLE_CHAIN) ----------------------
+    // When a static edge belongs to a chain, it carries the neighboring vertices so the
+    // edge-polygon and edge-circle colliders see the chain's adjacency (a body sliding
+    // across a chain vertex does not catch on the interior corner). edgeHasV0/edgeHasV3
+    // are 0 or 1. Edges without chain adjacency leave the has-flags 0 and behave as
+    // single segments, so the non-chain path is unchanged. With the flag off this block
+    // is absent and the edge layout is byte-identical.
+    float  edgeV0x[GB_N_EDGES], edgeV0y[GB_N_EDGES], edgeV3x[GB_N_EDGES], edgeV3y[GB_N_EDGES];
+    unsigned char edgeHasV0[GB_N_EDGES], edgeHasV3[GB_N_EDGES];
+#endif
     // contacts (persistent; manifold cache + warm-start + CCD/TOI)
     int    cBodyA[GB_MAX_CONTACTS], cBodyB[GB_MAX_CONTACTS], cEdge[GB_MAX_CONTACTS];
     unsigned char cTouching[GB_MAX_CONTACTS];

@@ -84,6 +84,7 @@ The narrow-phase and joint modules expose their phases as `GB_HD` functions, eac
 | weld joint | `gb_weld_joint.cuh` | `gbWeldInitVelocity`, `gbWeldSolveVelocity`, `gbWeldSolvePosition` |
 | prismatic joint | `gb_prismatic_joint.cuh` | `gbPrismaticInitVelocity`, `gbPrismaticSolveVelocity`, `gbPrismaticSolvePosition` |
 | pulley joint | `gb_pulley_joint.cuh` | `gbPulleyInitVelocity`, `gbPulleySolveVelocity`, `gbPulleySolvePosition` |
+| gear joint | `gb_gear_joint.cuh` | `gbGearInitVelocity`, `gbGearSolveVelocity`, `gbGearSolvePosition` |
 
 Each joint phase takes the joint struct and a `GBIslandData&` (the per-island solve scratch) and matches the Box2D 2.3.0 evaluation order exactly.
 

@@ -151,6 +151,15 @@ if(GPU_BOX2D_BUILD_TESTS)
   set_tests_properties(gb_pulley_joint PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_pulley_joint")
 
+  # Gear joint (revolute-revolute coupling). Self-contained (embeds its Box2D 2.3.0
+  # b2GearJoint and b2RevoluteJoint references). Validated, 0 ULP.
+  add_executable(gb_gear_joint_test test/gb_gear_joint_test.cu)
+  target_link_libraries(gb_gear_joint_test PRIVATE gpu_box2d)
+  target_include_directories(gb_gear_joint_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  add_test(NAME gb_gear_joint COMMAND gb_gear_joint_test)
+  set_tests_properties(gb_gear_joint PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_gear_joint")
+
   # Wired-step integration: polygons and the revolute joint driven through the
   # assembled gb_world_step. Built with the polygon and joint features enabled.
   add_executable(gb_wired_step_test test/gb_wired_step_test.cu)

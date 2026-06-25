@@ -230,14 +230,22 @@ loop. `gb_chain_shape_test.cu` reproduces the child-edge generation at 0 ULP aga
 Box2D 2.3.0 reference for an open chain and a loop, and confirms a child edge drives the
 edge-polygon collider end to end.
 
+## The gear joint (shipped)
+
+`gb_gear_joint.cuh` ports `b2GearJoint`, the last joint type. It couples two other
+joints (each revolute or prismatic) with a ratio, so turning one drives the other: the
+meshed-gears and rack-and-pinion model. The coupled coordinate is
+`coordinateA + ratio * coordinateB = constant`, where each coordinate is a joint angle
+(revolute) or a translation (prismatic). It is a four-body constraint over the two driven
+bodies and the two reference bodies, with a single-row velocity solve and a position
+solve. `gb_gear_joint_test.cu` couples two wheels (each on a revolute joint to a shared
+ground) with a ratio and runs the two revolute joints and the gear together in island
+order, reproducing both wheels' angular velocity and angle and the gear impulse at 0 ULP
+over hundreds of substeps.
+
 ## Adding the next module
 
 The same path extends the engine further.
-
-- **The gear joint.** The gear joint couples two other joints (revolute or prismatic)
-  with a ratio. It has its own `InitVelocityConstraints`, `SolveVelocityConstraints`,
-  and `SolvePositionConstraints` and slots into the same island interleave, reusing the
-  `GBMat22` and `GBMat33` ops the existing joints carry.
 - **Per-world chain storage.** The chain shape and its child-edge generation are
   validated standalone. Wiring a chain into the assembled step as a per-world static
   collider adds chain vertex storage behind the accessors and a child-edge loop in the

@@ -83,6 +83,7 @@ verifiable while it is built, rather than validating only at the end.
 | joint (weld) | b2WeldJoint init / velocity / position (3x3, rigid + soft) | yes |
 | joint (prismatic) | b2PrismaticJoint init / velocity / position (free + limit + motor) | yes |
 | joint (pulley) | b2PulleyJoint init / velocity / position (two-body, ratio) | yes |
+| joint (gear) | b2GearJoint init / velocity / position (revolute-revolute) | yes |
 
 ## What is verified
 
@@ -130,6 +131,10 @@ The following are green at 0 ULP against the CPU Box2D reference:
 - **Pulley joint.** `test/gb_pulley_joint_test.cu` hangs two bodies over two ground
   anchors with the length constraint over hundreds of substeps and reproduces both
   bodies' velocity, position, and the warm-start impulse at 0 ULP.
+- **Gear joint.** `test/gb_gear_joint_test.cu` couples two wheels, each on a revolute
+  joint to a shared ground, with a gear ratio, and runs the two revolute joints and the
+  gear together in island order over hundreds of substeps, reproducing both wheels'
+  angular velocity and angle and the gear impulse at 0 ULP.
 - **Broad-phase.** `test/gb_broadphase_test.cu` produces the exact proxyId sequence and
   the exact AddPair order as Box2D for a fixed scene.
 - **Contact solver and island.** `test/gb_island_test.cu` reproduces the velocity and
@@ -185,7 +190,7 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports thirteen green micro-tests and zero red:
+flags, `test/run_gate.sh` reports fourteen green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
@@ -199,9 +204,10 @@ GREEN  gb_distance_joint (rigid rod + soft spring, 0 ULP)
 GREEN  gb_weld_joint (rigid + soft weld, 3x3 path, 0 ULP)
 GREEN  gb_prismatic_joint (free + limit + motor, 0 ULP)
 GREEN  gb_pulley_joint (two-body pulley, 0 ULP)
+GREEN  gb_gear_joint (revolute-revolute gear, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
 GREEN  gb_batch (batched driver matches standalone step, 0 ULP)
-GATE SUMMARY: 13 green, 0 red
+GATE SUMMARY: 14 green, 0 red
 ALL GREEN.
 ```
 

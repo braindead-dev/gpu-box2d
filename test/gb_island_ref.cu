@@ -4,15 +4,26 @@
 // in the test TU. It exposes a flat-POD interface (gb_test_iface.h). The reference world
 // persists across substeps so warm-start impulses carry exactly as the engine does.
 //
-// world_types.cuh / b2_step.cuh are the reference adapter headers: a thin CPU build of
-// Box2D 2.3.0's collide and solve over the same arena layout. Point your include path at
-// your Box2D 2.3.0 reference build (see test/README.md). The arena field names below
-// (g_ref.tier, tier_radius, the density constant) belong to that external adapter; this
-// file maps them onto the engine's general userData / radius fields when exporting.
+// world_types.cuh and b2_step.cuh are the reference adapter headers: a thin CPU build of
+// Box2D 2.3.0's collide and solve over a flat arena layout. Point your include path at
+// your Box2D 2.3.0 reference build (see test/README.md).
+//
+// The reference adapter exposes its size index, radius table, and density under its own
+// names. The aliases below bind those to the generic names this file uses, so the body
+// reads in plain physics terms. To run against a different reference build, redefine the
+// three aliases to match its arena.
 #include "world_types.cuh"
 #include "b2_step.cuh"          // collide + solve over the reference Box2D 2.3.0 build
 #include "gb_test_iface.h"
 #include <cstring>
+
+// ---- reference-adapter aliases -------------------------------------------------
+// REF_SIZECLASS  : the arena's per-body size index (-1 marks the static ground).
+// refRadius(c)   : maps a size index to a circle radius.
+// REF_DENSITY    : the area density used to derive mass from radius.
+#define REF_SIZECLASS  tier
+#define refRadius      tier_radius
+#define REF_DENSITY    FRUIT_DENSITY
 
 static WorldArena g_ref;        // persistent reference arena
 
@@ -25,10 +36,10 @@ static void exportState(SolverState* o){
         o->xfPx[i]=g_ref.xfPx[i]; o->xfPy[i]=g_ref.xfPy[i]; o->xfQs[i]=g_ref.xfQs[i]; o->xfQc[i]=g_ref.xfQc[i];
         o->velX[i]=g_ref.velX[i]; o->velY[i]=g_ref.velY[i]; o->angVel[i]=g_ref.angVel[i];
         o->invMass[i]=g_ref.invMass[i]; o->invI[i]=g_ref.invI[i];
-        // g_ref.tier is the upstream reference arena's size index; map it to a radius
-        // and carry it as the engine's general userData / radius fields.
-        o->userData[i]=g_ref.tier[i]; o->bodyType[i]=g_ref.bodyType[i];
-        o->radius[i]=g_ref.tier[i]>=0 ? tier_radius(g_ref.tier[i]) : 0.0f;
+        // The arena's size index maps to a radius; carry both onto the engine's general
+        // userData and radius fields.
+        o->userData[i]=g_ref.REF_SIZECLASS[i]; o->bodyType[i]=g_ref.bodyType[i];
+        o->radius[i]=g_ref.REF_SIZECLASS[i]>=0 ? refRadius(g_ref.REF_SIZECLASS[i]) : 0.0f;
         o->sleepTime[i]=g_ref.sleepTime[i]; o->awake[i]=g_ref.awake[i]; o->alive[i]=g_ref.alive[i];
     }
     o->bodyCount=g_ref.bodyCount;
@@ -51,18 +62,20 @@ static void exportState(SolverState* o){
 
 extern "C" void ref_init(const SeedBody* seeds, int n){
     memset(&g_ref, 0, sizeof(WorldArena));
-    g_ref.bodyType[GROUND_BODY]=0; g_ref.tier[GROUND_BODY]=-1;
+    g_ref.bodyType[GROUND_BODY]=0; g_ref.REF_SIZECLASS[GROUND_BODY]=-1;
     g_ref.invMass[GROUND_BODY]=0; g_ref.invI[GROUND_BODY]=0;
     g_ref.alive[GROUND_BODY]=1; g_ref.awake[GROUND_BODY]=0;
     syncTransform(g_ref, GROUND_BODY);
+    // A container made of three static edges: a floor and two side walls. This is a
+    // plain Box2D scene; the side walls keep settling piles bounded.
     g_ref.edgeAx[0]=-WALL_X_C; g_ref.edgeAy[0]=0; g_ref.edgeBx[0]= WALL_X_C; g_ref.edgeBy[0]=0;
     g_ref.edgeAx[1]=-WALL_X_C; g_ref.edgeAy[1]=0; g_ref.edgeBx[1]=-WALL_X_C; g_ref.edgeBy[1]=CONTAINER_H_C;
     g_ref.edgeAx[2]= WALL_X_C; g_ref.edgeAy[2]=0; g_ref.edgeBx[2]= WALL_X_C; g_ref.edgeBy[2]=CONTAINER_H_C;
     int bc=1;
     for (int i=0;i<n;++i){
-        int s=bc++; int t=seeds[i].sizeClass; float r=tier_radius(t);
-        float mass=FRUIT_DENSITY*B2_PI*r*r; float I=mass*(0.5f*r*r);
-        g_ref.bodyType[s]=2; g_ref.tier[s]=t;
+        int s=bc++; int c=seeds[i].sizeClass; float r=refRadius(c);
+        float mass=REF_DENSITY*B2_PI*r*r; float I=mass*(0.5f*r*r);
+        g_ref.bodyType[s]=2; g_ref.REF_SIZECLASS[s]=c;
         g_ref.invMass[s]=mass>0.0f?1.0f/mass:0.0f; g_ref.invI[s]=I>0.0f?1.0f/I:0.0f;
         g_ref.alive[s]=1; g_ref.awake[s]=1; g_ref.sleepTime[s]=0.0f;
         g_ref.sweepCx[s]=seeds[i].x;  g_ref.sweepCy[s]=seeds[i].y;

@@ -50,6 +50,11 @@ struct WorldPoolsSoA {
     float* cPointLocalY;   // [ MAX*NW ], cont
     float* cNormalImpulse;   // [ MAX*NW ], cont
     float* cTangentImpulse;   // [ MAX*NW ], cont
+    int* cPointCount;   // [ MAX*NW ], cont (1 or 2)
+    float* cPointLocal2X;   // [ MAX*NW ], cont
+    float* cPointLocal2Y;   // [ MAX*NW ], cont
+    float* cNormalImpulse2;   // [ MAX*NW ], cont
+    float* cTangentImpulse2;   // [ MAX*NW ], cont
     float* cToi;   // [ MAX*NW ], cont
     int* cToiCount;   // [ MAX*NW ], cont
     unsigned char* cToiFlag;   // [ MAX*NW ], cont

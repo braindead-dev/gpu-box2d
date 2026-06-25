@@ -79,6 +79,10 @@ struct WorldShared {
     float  cLocalPointX[GB_MAX_CONTACTS],  cLocalPointY[GB_MAX_CONTACTS];
     float  cPointLocalX[GB_MAX_CONTACTS],  cPointLocalY[GB_MAX_CONTACTS];
     float  cNormalImpulse[GB_MAX_CONTACTS], cTangentImpulse[GB_MAX_CONTACTS];
+    // second manifold point (polygon contacts). cPointCount selects 1 or 2.
+    int    cPointCount[GB_MAX_CONTACTS];
+    float  cPointLocal2X[GB_MAX_CONTACTS], cPointLocal2Y[GB_MAX_CONTACTS];
+    float  cNormalImpulse2[GB_MAX_CONTACTS], cTangentImpulse2[GB_MAX_CONTACTS];
     float  cToi[GB_MAX_CONTACTS];
     int    cToiCount[GB_MAX_CONTACTS];
     unsigned char cToiFlag[GB_MAX_CONTACTS], cEnabled[GB_MAX_CONTACTS];

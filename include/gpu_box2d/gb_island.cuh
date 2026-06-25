@@ -71,11 +71,22 @@ GB_HD inline void gbIslandSolve(GBWorld& w, GBIslandData& isl, bool allowSleep){
         vc.invMassA = BODY(w, invMass, bodyA); vc.invMassB = BODY(w, invMass, bodyB);
         vc.invIA = BODY(w, invI, bodyA);       vc.invIB = BODY(w, invI, bodyB);
         vc.contactIdx = ci;
+        // point count: a cached manifold of 2 points (polygon contact) drives the
+        // two-point block path; everything else is a single point. A contact whose
+        // cache predates polygon support reads back 0, which maps to 1.
+        int pcount = CONT(w, cPointCount, ci);
+        vc.pointCount = pcount == 2 ? 2 : 1;
         // warm-start impulse (dtRatio == 1 in steady DT)
         vc.p.normalImpulse  = CONT(w, cNormalImpulse, ci);   // warmStarting=true, dtRatio=1
         vc.p.tangentImpulse = CONT(w, cTangentImpulse, ci);
         vc.p.rA = v2(0,0); vc.p.rB = v2(0,0);
         vc.p.normalMass=0; vc.p.tangentMass=0; vc.p.velocityBias=0;
+        if (vc.pointCount == 2){
+            vc.p2.normalImpulse  = CONT(w, cNormalImpulse2, ci);
+            vc.p2.tangentImpulse = CONT(w, cTangentImpulse2, ci);
+            vc.p2.rA = v2(0,0); vc.p2.rB = v2(0,0);
+            vc.p2.normalMass=0; vc.p2.tangentMass=0; vc.p2.velocityBias=0;
+        }
 
         pc.indexA=ia; pc.indexB=ib;
         pc.invMassA=vc.invMassA; pc.invMassB=vc.invMassB;
@@ -83,6 +94,7 @@ GB_HD inline void gbIslandSolve(GBWorld& w, GBIslandData& isl, bool allowSleep){
         pc.localNormal=v2(CONT(w, cLocalNormalX, ci), CONT(w, cLocalNormalY, ci));
         pc.localPoint =v2(CONT(w, cLocalPointX, ci),  CONT(w, cLocalPointY, ci));
         pc.pLocalPoint=v2(CONT(w, cPointLocalX, ci),  CONT(w, cPointLocalY, ci));
+        pc.pLocalPoint2=v2(CONT(w, cPointLocal2X, ci), CONT(w, cPointLocal2Y, ci));
         pc.type=CONT(w, cManifoldType, ci); pc.radiusA=radiusA; pc.radiusB=radiusB;
     }
 

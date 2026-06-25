@@ -102,6 +102,28 @@ and the position solve.
   and compares the bob velocity, angular velocity, position, angle, and the
   warm-start impulse against the Box2D 2.3.0 reference at 0 ULP.
 
+## The distance and weld joints (shipped)
+
+Two more joint types follow the same module pattern: a header against the accessor
+contract with init, velocity, and position phases, and a 0-ULP micro-test against the
+Box2D 2.3.0 reference.
+
+- **Distance joint.** `gb_distance_joint.cuh` ports `b2DistanceJoint`. The rigid case is
+  a single velocity row plus a length-correcting position solve; the soft case folds a
+  frequency and damping ratio into a bias and gamma so the velocity row alone carries
+  the spring and the position solve is skipped. `gb_distance_joint_test.cu` runs a rigid
+  rod and a soft spring at 0 ULP.
+- **Weld joint.** `gb_weld_joint.cuh` ports `b2WeldJoint`, the first 3x3 joint. It holds
+  the shared anchor (two linear rows) and the relative angle (the angular row) together
+  with the 3x3 effective-mass matrix. The rigid case uses the symmetric 3x3 inverse; the
+  soft case inverts the 2x2 linear block and carries the angular row through a bias and
+  gamma. `gb_weld_joint_test.cu` runs a rigid and a soft weld at 0 ULP, exercising both
+  paths.
+
+The 3x3 machinery the weld joint needs lives in `gb_contact_types.cuh`: `GBMat33` with
+`Solve33`, `Solve22`, `GetInverse22`, and `GetSymInverse33`, line-faithful to
+`b2Mat33`. The revolute motor and angle-limit rows reuse the same matrix.
+
 ## Wired into the assembled step (shipped)
 
 With `GB_ENABLE_POLYGONS` and `GB_ENABLE_JOINTS` the assembled `gb_world_step` drives
@@ -158,10 +180,11 @@ manifold. It replaces the two-segment-polygon stand-in the wired step used befor
 The same path extends the engine further.
 
 - **More joint types.** The revolute motor and angle-limit rows add the 3x3 path
-  (`b2Mat33::Solve22` / `Solve33`) on top of the point-to-point joint. Prismatic,
-  distance, weld, and pulley each have their own `InitVelocityConstraints`,
-  `SolveVelocityConstraints`, and `SolvePositionConstraints` and slot into the same
-  island interleave.
+  (`b2Mat33::Solve22` / `Solve33`) on top of the point-to-point joint; the `GBMat33`
+  ops the weld joint already uses carry it. The prismatic joint (translation along an
+  axis with an optional motor and limit) and the pulley and gear joints each have their
+  own `InitVelocityConstraints`, `SolveVelocityConstraints`, and
+  `SolvePositionConstraints` and slot into the same island interleave.
 - **More shapes.** The chain shape and the general edge (with vertex0/vertex3
   connectivity) follow the polygon pattern: shape data behind new accessors, a
   narrow-phase ported in order, and a tight AABB helper.

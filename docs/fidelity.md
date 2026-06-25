@@ -77,7 +77,9 @@ verifiable while it is built, rather than validating only at the end.
 | block solver | b2ContactSolver two-point LCP cascade + 2x2 block | yes |
 | island | b2Island::Solve integrate / sleep + DFS order | yes |
 | ccd | b2TimeOfImpact / b2Distance (GJK) | yes |
-| joint | b2RevoluteJoint init / velocity / position (point-to-point) | yes |
+| joint (revolute) | b2RevoluteJoint init / velocity / position (point-to-point) | yes |
+| joint (distance) | b2DistanceJoint init / velocity / position (rigid + soft) | yes |
+| joint (weld) | b2WeldJoint init / velocity / position (3x3, rigid + soft) | yes |
 
 ## What is verified
 
@@ -103,6 +105,14 @@ The following are green at 0 ULP against the CPU Box2D reference:
 - **Revolute joint.** `test/gb_joint_test.cu` swings a two-body pendulum over
   hundreds of substeps and reproduces the bob velocity, angular velocity, position,
   angle, and the warm-start impulse at 0 ULP.
+- **Distance joint.** `test/gb_distance_joint_test.cu` runs a rigid rod and a soft
+  spring over hundreds of substeps and reproduces the bob velocity, angular velocity,
+  position, angle, and the warm-start impulse at 0 ULP, covering both the rigid
+  position-corrected path and the soft frequency-and-damping path.
+- **Weld joint.** `test/gb_weld_joint_test.cu` holds a bar welded to a static base
+  over hundreds of substeps and reproduces the bar velocity, angular velocity,
+  position, angle, and all three warm-start impulse components at 0 ULP, covering the
+  rigid 3x3 symmetric-inverse path and the soft 2x2-plus-angular path.
 - **Broad-phase.** `test/gb_broadphase_test.cu` produces the exact proxyId sequence and
   the exact AddPair order as Box2D for a fixed scene.
 - **Contact solver and island.** `test/gb_island_test.cu` reproduces the velocity and
@@ -154,7 +164,7 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports six green micro-tests and zero red:
+flags, `test/run_gate.sh` reports eight green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
@@ -162,8 +172,10 @@ GREEN  gb_polygon (mass + polygon-polygon + polygon-circle, 0 ULP)
 GREEN  gb_collide_edge_polygon (b2CollideEdgeAndPolygon, face-A + face-B, 0 ULP)
 GREEN  gb_block_solver (two-point LCP block solve, 0 ULP)
 GREEN  gb_joint (revolute pendulum, 0 ULP)
+GREEN  gb_distance_joint (rigid rod + soft spring, 0 ULP)
+GREEN  gb_weld_joint (rigid + soft weld, 3x3 path, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
-GATE SUMMARY: 6 green, 0 red
+GATE SUMMARY: 8 green, 0 red
 ALL GREEN.
 ```
 

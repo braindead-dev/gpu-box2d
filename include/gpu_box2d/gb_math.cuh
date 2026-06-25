@@ -30,6 +30,16 @@ GB_HD inline float b2Normalize(V2& v){
     return length;
 }
 
+// 3D vector (b2Vec3), used by the 3x3 joint solves.
+struct V3 { float x, y, z; };
+GB_HD inline V3 v3(float x, float y, float z){ V3 r; r.x=x; r.y=y; r.z=z; return r; }
+GB_HD inline V3 operator+(V3 a, V3 b){ return v3(a.x+b.x, a.y+b.y, a.z+b.z); }
+GB_HD inline V3 operator-(V3 a, V3 b){ return v3(a.x-b.x, a.y-b.y, a.z-b.z); }
+GB_HD inline V3 operator*(float s, V3 a){ return v3(s*a.x, s*a.y, s*a.z); }
+GB_HD inline V3 operator-(V3 a){ return v3(-a.x, -a.y, -a.z); }
+GB_HD inline float b2Dot3(V3 a, V3 b){ return a.x*b.x + a.y*b.y + a.z*b.z; }
+GB_HD inline V3 b2Cross3(V3 a, V3 b){ return v3(a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x); }
+
 // rotation (sin,cos) + transform
 struct Rot { float s, c; };
 GB_HD inline Rot rotSet(float angle){ Rot q; q.s=sinf(angle); q.c=cosf(angle); return q; }

@@ -109,7 +109,7 @@ CXX=clang++ ./test/run_gate_host.sh
 
 ## Status
 
-The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute, distance, weld, prismatic, pulley, and gear joints. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, fifteen micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
+The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute, distance, weld, prismatic, pulley, and gear joints. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, sixteen micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
 
 | Component | Status |
 |---|---|
@@ -134,13 +134,14 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Block-per-world shared-memory execution | built and measured, slower (see performance.md) |
 | Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
 | Python binding (batched driver + pybind11, numpy obs/state API) | validated host-mode, driver 0 ULP vs the standalone step |
-| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 15 micro-tests, 0 red |
+| CUDA batch path (SoA upload, thread-per-world step, download) | device path written; the upload/download transpose round-trips byte-exact |
+| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 16 micro-tests, 0 red |
 
 ## Roadmap
 
 The shape set now spans circles, edges, and convex polygons, with circle, edge-circle, polygon-polygon, polygon-circle, and the dedicated edge-polygon narrow-phase; the contact solver covers the one-point and two-point block paths; the joint set covers the revolute, distance, weld, prismatic, pulley, and gear joints; and the chain shape is a static collider. The polygon narrow-phase, the revolute joint solve, and the chain collider are wired into the assembled `gb_world_step` behind the `GB_ENABLE_POLYGONS`, `GB_ENABLE_JOINTS`, and `GB_ENABLE_CHAIN` build flags, so a step over a mixed scene dispatches circle, edge, polygon, and chain contacts and runs the joint solve in island order. The forward direction widens the launcher while holding the bit-identical guarantee.
 
-1. A CUDA batched launcher on top of the Python binding, so the same `Batch` API a user drives on a CPU steps on the GPU through the SoA-global path. The host driver and the pybind11 module are in [bindings/](bindings/); the device upload-step-download path is the remaining piece.
+1. Running the CUDA batch path on a card. The device upload-step-download path is written in [bindings/gb_batch_cuda.cuh](bindings/gb_batch_cuda.cuh), and its SoA transpose round-trips byte-exact in the gate; the remaining piece is the device-versus-host 0-ULP check and the throughput numbers on a CUDA GPU.
 2. Per-point warm-start id matching for polygon contacts, so a contact whose clip features change between substeps carries impulse by matching feature id per surviving point.
 
 Two earlier roadmap items are now closed findings. Making dense connected islands bit-identical is unreachable: the residual is irreducible float32 rounding in large islands, reproduced by both the faithful broad-phase and the colored solver, so it is documented as a known property in [docs/fidelity.md](docs/fidelity.md). Block-parallelizing the phases was built and measured slower than thread-per-world and is documented as a rejected approach in [docs/performance.md](docs/performance.md).

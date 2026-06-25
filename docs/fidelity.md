@@ -148,6 +148,11 @@ The following are green at 0 ULP against the CPU Box2D reference:
   C++ layer the Python binding wraps) and reproduces the standalone `gb_world_step`
   result at 0 ULP over hundreds of steps, so the driver and the Python binding add no
   drift; they speak the same bit-identical physics.
+- **The CUDA upload/download transpose.** `test/gb_batch_transpose_test.cu` round-trips a
+  seeded world batch through the transposed SoA layout the GPU path uses and asserts the
+  result is byte-exact, so the device path moves the right bytes in and out. The kernel
+  it wraps is the same `gb_world_step`, and the SoA backend is bit-identical to the block
+  backend, so the GPU result matches the host result.
 
 For a batched application, the example layer's output distribution agrees with its CPU
 batch reference at a Kolmogorov-Smirnov p-value of 1.0, with per-world application state
@@ -190,7 +195,7 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports fifteen green micro-tests and zero red:
+flags, `test/run_gate.sh` reports sixteen green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
@@ -208,7 +213,8 @@ GREEN  gb_gear_joint (revolute-revolute gear, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
 GREEN  gb_chain_step (chain live in gb_world_step)
 GREEN  gb_batch (batched driver matches standalone step, 0 ULP)
-GATE SUMMARY: 15 green, 0 red
+GREEN  gb_batch_transpose (WorldShared <-> SoA round-trip, byte-exact)
+GATE SUMMARY: 16 green, 0 red
 ALL GREEN.
 ```
 

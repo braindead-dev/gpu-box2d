@@ -191,6 +191,17 @@ if(GPU_BOX2D_BUILD_TESTS)
   set_tests_properties(gb_batch PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_batch")
 
+  # Batch transpose. Validates the SoA upload/download transpose the CUDA batch path
+  # uses, round-tripping a WorldShared array through the flat SoA layout byte-exact.
+  add_executable(gb_batch_transpose_test test/gb_batch_transpose_test.cu)
+  target_link_libraries(gb_batch_transpose_test PRIVATE gpu_box2d)
+  target_include_directories(gb_batch_transpose_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/test ${CMAKE_CURRENT_SOURCE_DIR}/bindings)
+  target_compile_definitions(gb_batch_transpose_test PRIVATE GB_ENABLE_POLYGONS GB_ENABLE_JOINTS GB_ENABLE_CHAIN)
+  add_test(NAME gb_batch_transpose COMMAND gb_batch_transpose_test)
+  set_tests_properties(gb_batch_transpose PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_batch_transpose")
+
   if(GPU_BOX2D_BUILD_REF_TESTS AND GPU_BOX2D_REF_INCLUDE)
     add_executable(gb_toi_test test/gb_toi_test.cu)
     target_link_libraries(gb_toi_test PRIVATE gpu_box2d)

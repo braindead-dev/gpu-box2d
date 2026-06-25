@@ -20,6 +20,14 @@ python bindings/setup.py build_ext --inplace
 
 The build sets the fidelity flags (`-ffp-contract=off`, and `-mfpmath=sse` on x86) so the host result matches the CPU Box2D reference. It needs `pybind11` and `numpy`.
 
+## GPU build
+
+The host build steps on the CPU. The GPU build steps the same seeded state on the device through the SoA-global thread-per-world backend, with the seeding and read-back API unchanged.
+
+The device path is in `bindings/gb_batch_cuda.cuh`. It uploads the seeded `WorldShared` array to the transposed SoA layout (`field[slot*NW + world]`), launches the thread-per-world step kernel, and downloads the result. The transpose is driven by a single field list, so it stays in sync with the world state, and it is validated host-mode by `test/gb_batch_transpose_test.cu`, which round-trips a world batch through the SoA layout byte-exact. The kernel it wraps is the same `gb_world_step` the host path runs, and the SoA backend is bit-identical to the block backend, so the GPU result matches the host result.
+
+To build the GPU extension, compile the binding TU with nvcc, `-DGB_SOA_GLOBAL` and the feature flags, and the frozen flags (`--fmad=false -prec-div=true -prec-sqrt=true`), and route `Batch.step` to `gbBatchStepDevice`. The host driver and the device driver share the seeding helpers in `gb_batch.cuh`, which write `WorldShared` fields by name and so work on either backend. The definitive GPU throughput and the device-versus-host 0-ULP check run on a CUDA card; this Mac and CI validate the host driver and the transpose.
+
 ## API
 
 Everything lives on `gpu_box2d.Batch`. Slot 0 of every world is the static ground body; bodies you add take slots 1, 2, and up.

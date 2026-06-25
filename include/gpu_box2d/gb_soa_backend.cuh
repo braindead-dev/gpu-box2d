@@ -103,6 +103,11 @@ struct WorldPoolsSoA {
 #endif
 };
 
+// The handle and the accessor macros are the SoA-global backend proper. They emit only
+// under GB_SOA_GLOBAL (the production backend), so the WorldPoolsSoA struct above can be
+// pulled in standalone (for the batch transpose, which bridges the two backends) without
+// redefining the block backend's accessors.
+#ifdef GB_SOA_GLOBAL
 struct GBWorld { WorldPoolsSoA* p; int world; };
 
 // coalesced index: slot*NW + world
@@ -112,3 +117,4 @@ struct GBWorld { WorldPoolsSoA* p; int world; };
 #define EDGE(w, field, e)  ((w).p->field[GBIDX(w,e)])
 #define JOINT(w, field, j) ((w).p->field[GBIDX(w,j)])
 #define SCAL(w, field)     ((w).p->field[(w).world])
+#endif

@@ -65,6 +65,7 @@ build_run gb_gear_joint          "PASS gb_gear_joint"
 build_run gb_wired_step          "PASS gb_wired_step" "-DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS"
 build_run gb_chain_step          "PASS gb_chain_step" "-DGB_ENABLE_POLYGONS -DGB_ENABLE_CHAIN"
 build_run gb_batch               "PASS gb_batch" "-DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS -I$ROOT/bindings"
+build_run gb_batch_transpose     "PASS gb_batch_transpose" "-DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS -DGB_ENABLE_CHAIN -I$ROOT/bindings"
 
 echo "================================================================"
 echo "HOST GATE SUMMARY: $PASS green, $FAIL red"

@@ -203,6 +203,18 @@ else
   bad "gb_batch failed to build"
 fi
 
+# Batch transpose: validates the SoA upload/download transpose the CUDA batch path uses,
+# by round-tripping a WorldShared array through the flat SoA layout byte-exact.
+if nvcc $FLAGS -DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS -DGB_ENABLE_CHAIN -I"$INC" -I"$ROOT/bindings" -I"$HERE" "$HERE/gb_batch_transpose_test.cu" -o "$HERE/gb_batch_transpose_test" 2>/dev/null; then
+  if "$HERE/gb_batch_transpose_test" 2>&1 | grep -q "PASS gb_batch_transpose"; then
+    ok "gb_batch_transpose (WorldShared <-> SoA round-trip, byte-exact)"
+  else
+    bad "gb_batch_transpose diverged"
+  fi
+else
+  bad "gb_batch_transpose failed to build"
+fi
+
 # The CCD (gb_toi) and solver/island (gb_contact_solver + gb_island) micro-tests
 # compile against the Box2D 2.3.0 reference translation unit. That reference is
 # wired in once the narrow-phase and solver modules are assembled. Until then,

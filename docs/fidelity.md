@@ -82,6 +82,7 @@ verifiable while it is built, rather than validating only at the end.
 | joint (distance) | b2DistanceJoint init / velocity / position (rigid + soft) | yes |
 | joint (weld) | b2WeldJoint init / velocity / position (3x3, rigid + soft) | yes |
 | joint (prismatic) | b2PrismaticJoint init / velocity / position (free + limit + motor) | yes |
+| joint (pulley) | b2PulleyJoint init / velocity / position (two-body, ratio) | yes |
 
 ## What is verified
 
@@ -126,6 +127,9 @@ The following are green at 0 ULP against the CPU Box2D reference:
   hundreds of substeps and reproduces the body velocity, angular velocity, position,
   angle, the three impulse components, and the motor impulse at 0 ULP, covering the
   free slider (2x2 block), the active translation limit (3x3 path), and the motor row.
+- **Pulley joint.** `test/gb_pulley_joint_test.cu` hangs two bodies over two ground
+  anchors with the length constraint over hundreds of substeps and reproduces both
+  bodies' velocity, position, and the warm-start impulse at 0 ULP.
 - **Broad-phase.** `test/gb_broadphase_test.cu` produces the exact proxyId sequence and
   the exact AddPair order as Box2D for a fixed scene.
 - **Contact solver and island.** `test/gb_island_test.cu` reproduces the velocity and
@@ -181,7 +185,7 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports twelve green micro-tests and zero red:
+flags, `test/run_gate.sh` reports thirteen green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
@@ -194,9 +198,10 @@ GREEN  gb_revolute_joint (point-to-point + motor + limit, 0 ULP)
 GREEN  gb_distance_joint (rigid rod + soft spring, 0 ULP)
 GREEN  gb_weld_joint (rigid + soft weld, 3x3 path, 0 ULP)
 GREEN  gb_prismatic_joint (free + limit + motor, 0 ULP)
+GREEN  gb_pulley_joint (two-body pulley, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
 GREEN  gb_batch (batched driver matches standalone step, 0 ULP)
-GATE SUMMARY: 12 green, 0 red
+GATE SUMMARY: 13 green, 0 red
 ALL GREEN.
 ```
 

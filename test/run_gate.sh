@@ -143,6 +143,18 @@ else
   bad "gb_prismatic_joint failed to build"
 fi
 
+# Pulley joint (two-body, ratio): self-contained (embeds its Box2D 2.3.0
+# b2PulleyJoint reference). Validated, 0-ULP.
+if nvcc $FLAGS -I"$INC" -I"$HERE" "$HERE/gb_pulley_joint_test.cu" -o "$HERE/gb_pulley_joint_test" 2>/dev/null; then
+  if "$HERE/gb_pulley_joint_test" 2>&1 | grep -q "PASS gb_pulley_joint"; then
+    ok "gb_pulley_joint (two-body pulley, 0 ULP)"
+  else
+    bad "gb_pulley_joint diverged"
+  fi
+else
+  bad "gb_pulley_joint failed to build"
+fi
+
 # Wired-step integration: polygons and the revolute joint driven through the
 # assembled gb_world_step (built with the polygon and joint features on).
 if nvcc $FLAGS -DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS -I"$INC" -I"$HERE" "$HERE/gb_wired_step_test.cu" -o "$HERE/gb_wired_step_test" 2>/dev/null; then

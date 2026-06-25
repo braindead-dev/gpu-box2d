@@ -142,6 +142,15 @@ if(GPU_BOX2D_BUILD_TESTS)
   set_tests_properties(gb_prismatic_joint PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_prismatic_joint")
 
+  # Pulley joint (two-body, ratio). Self-contained (embeds its Box2D 2.3.0
+  # b2PulleyJoint reference). Validated, 0 ULP.
+  add_executable(gb_pulley_joint_test test/gb_pulley_joint_test.cu)
+  target_link_libraries(gb_pulley_joint_test PRIVATE gpu_box2d)
+  target_include_directories(gb_pulley_joint_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  add_test(NAME gb_pulley_joint COMMAND gb_pulley_joint_test)
+  set_tests_properties(gb_pulley_joint PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_pulley_joint")
+
   # Wired-step integration: polygons and the revolute joint driven through the
   # assembled gb_world_step. Built with the polygon and joint features enabled.
   add_executable(gb_wired_step_test test/gb_wired_step_test.cu)

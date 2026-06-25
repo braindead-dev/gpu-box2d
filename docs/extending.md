@@ -206,6 +206,17 @@ manifold. It replaces the two-segment-polygon stand-in the wired step used befor
   separated box (no contact), and reproduces the manifold type, point count, local
   normal, local point, both clip points, and both contact ids at 0 ULP.
 
+## The pulley joint (shipped)
+
+`gb_pulley_joint.cuh` ports `b2PulleyJoint`. It connects two bodies over two fixed
+ground anchors with the constraint `lengthA + ratio * lengthB = constant`, so one body
+descending lets the other rise, the block-and-tackle and counterweight model. It is a
+single constraint row over the two pulley arms: an effective mass that folds both arms
+and the ratio, a velocity solve, and a position solve that holds the total length.
+`gb_pulley_joint_test.cu` hangs two bodies over two ground anchors and reproduces both
+bodies' velocity, position, and the warm-start impulse at 0 ULP over hundreds of
+substeps.
+
 ## The chain shape (shipped)
 
 `gb_chain_shape.cuh` ports `b2ChainShape`, the standard static world boundary: a ground
@@ -223,9 +234,9 @@ edge-polygon collider end to end.
 
 The same path extends the engine further.
 
-- **More joint types.** The pulley and gear joints each have their own
-  `InitVelocityConstraints`, `SolveVelocityConstraints`, and
-  `SolvePositionConstraints` and slot into the same island interleave, reusing the
+- **The gear joint.** The gear joint couples two other joints (revolute or prismatic)
+  with a ratio. It has its own `InitVelocityConstraints`, `SolveVelocityConstraints`,
+  and `SolvePositionConstraints` and slots into the same island interleave, reusing the
   `GBMat22` and `GBMat33` ops the existing joints carry.
 - **Per-world chain storage.** The chain shape and its child-edge generation are
   validated standalone. Wiring a chain into the assembled step as a per-world static

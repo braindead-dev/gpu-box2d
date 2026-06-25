@@ -32,6 +32,7 @@ green micro-test. This is how the engine stays verifiable while it is built.
 | joint (distance) | b2DistanceJoint init / velocity / position (rigid + soft) | yes |
 | joint (weld) | b2WeldJoint init / velocity / position (3x3, rigid + soft) | yes |
 | joint (prismatic) | b2PrismaticJoint init / velocity / position (free + limit + motor) | yes |
+| joint (pulley) | b2PulleyJoint init / velocity / position (two-body, ratio) | yes |
 
 ## Template
 

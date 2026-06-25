@@ -1,6 +1,6 @@
 # gpu-box2d
 
-A GPU-accelerated port of Box2D 2.3.0 that runs thousands of independent, bit-faithful 2D physics worlds in parallel on a single GPU. It handles circles, edges, and convex polygons, the single-point and two-point block contact solvers, continuous collision, and the revolute, distance, weld, and prismatic joints, each verified bit-for-bit against Box2D 2.3.0.
+A GPU-accelerated port of Box2D 2.3.0 that runs thousands of independent, bit-faithful 2D physics worlds in parallel on a single GPU. It handles circles, edges, and convex polygons, the single-point and two-point block contact solvers, continuous collision, and the revolute, distance, weld, prismatic, and pulley joints, each verified bit-for-bit against Box2D 2.3.0.
 
 ## What it does
 
@@ -8,7 +8,7 @@ Reinforcement learning and large-scale simulation need to step many independent 
 
 Bit-identicality is the point. A position-based or re-implemented 2D solver runs fast on a GPU but produces different physics, which silently shifts the dynamics an agent trains against. This engine ports Box2D 2.3.0 phase for phase and reproduces its floats exactly, so a policy trained on the GPU batch behaves the same against the CPU engine. You get the throughput of batched GPU simulation and the dynamics of the reference engine at the same time.
 
-The physics core is a general, header-only CUDA library with no application logic baked in. It covers the shape, contact, and joint set a 2D rigid-body engine needs: circles, edges, and convex polygons; one-point and two-point contact manifolds with the block solver; the broad-phase, the island solver, continuous collision, and the revolute, distance, weld, and prismatic joints. An application plugs in through a generic contact listener and the per-world field hooks; the fruit-merge game under `examples/` is one such application and lives entirely outside the core.
+The physics core is a general, header-only CUDA library with no application logic baked in. It covers the shape, contact, and joint set a 2D rigid-body engine needs: circles, edges, and convex polygons; one-point and two-point contact manifolds with the block solver; the broad-phase, the island solver, continuous collision, and the revolute, distance, weld, prismatic, and pulley joints. An application plugs in through a generic contact listener and the per-world field hooks; the fruit-merge game under `examples/` is one such application and lives entirely outside the core.
 
 ## Design
 
@@ -44,7 +44,7 @@ Validated on an A10 (sm_86) with CUDA 12.8.
 
 - **Single-world physics is bit-identical.** A circle settling on a static edge, a stack of circles, and a settling pile are 0 ULP against the CPU Box2D reference over hundreds of substeps, including the CCD path. The GPU device path is 0 ULP against the host path of the same source on every scenario, so the GPU adds no floating-point drift of its own.
 - **Polygons and the two-point block solver are bit-identical.** The polygon mass formula, the `b2CollidePolygons` two-point manifold, the `b2CollidePolygonAndCircle` manifold, and the two-point block-solver LCP cascade through the full velocity and position spine are 0 ULP against the Box2D 2.3.0 reference.
-- **The joints are bit-identical.** A revolute joint with its motor and angle limit, a rigid rod and a soft spring on a distance joint, a welded bar on a weld joint, and a slider with a limit and a motor on a prismatic joint are each 0 ULP against the Box2D 2.3.0 reference over hundreds of substeps.
+- **The joints are bit-identical.** A revolute joint with its motor and angle limit, a rigid rod and a soft spring on a distance joint, a welded bar on a weld joint, a slider with a limit and a motor on a prismatic joint, and a two-body pulley are each 0 ULP against the Box2D 2.3.0 reference over hundreds of substeps.
 - **Batched output matches the reference in distribution.** Against the CPU batch reference of the example application, the output distribution agrees at a Kolmogorov-Smirnov p-value of 1.0, with per-world state byte-exact.
 - **Throughput is about 23K env-steps per second**, roughly 12x a 26-core CPU baseline and about 2x the pre-rewrite version. This is the measured ceiling for a bit-identical Box2D Gauss-Seidel solver on this card. The serial solver is about 74 percent of a step and resists parallelizing while preserving the bit match, and occupancy plus data-dependent control flow bound the rest. Throughput scales with the GPU, so a larger card lifts the absolute number. [docs/performance.md](docs/performance.md) has the full breakdown.
 
@@ -109,7 +109,7 @@ CXX=clang++ ./test/run_gate_host.sh
 
 ## Status
 
-The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute, distance, weld, and prismatic joints. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, twelve micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
+The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute, distance, weld, prismatic, and pulley joints. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, thirteen micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
 
 | Component | Status |
 |---|---|
@@ -127,19 +127,20 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Distance joint (`b2DistanceJoint`, rigid + soft) | validated, 0 ULP on a rod and a spring over hundreds of substeps |
 | Weld joint (`b2WeldJoint`, 3x3, rigid + soft) | validated, 0 ULP on a welded bar over hundreds of substeps |
 | Prismatic joint (`b2PrismaticJoint`, free + limit + motor) | validated, 0 ULP on a slider over hundreds of substeps |
+| Pulley joint (`b2PulleyJoint`, two-body, ratio) | validated, 0 ULP on a two-body pulley over hundreds of substeps |
 | Polygons and the joint wired into the assembled `gb_world_step` | live, box-on-ground, box-on-box, circle-on-box, and a pinned pendulum settle through the step |
 | Thread-per-world SoA execution (production path) | validated, about 23K env-steps/s on an A10 |
 | Block-per-world shared-memory execution | built and measured, slower (see performance.md) |
 | Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
 | Python binding (batched driver + pybind11, numpy obs/state API) | validated host-mode, driver 0 ULP vs the standalone step |
-| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 12 micro-tests, 0 red |
+| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 13 micro-tests, 0 red |
 
 ## Roadmap
 
-The shape set now spans circles, edges, and convex polygons, with circle, edge-circle, polygon-polygon, polygon-circle, and the dedicated edge-polygon narrow-phase; the contact solver covers the one-point and two-point block paths, and the joint set covers the revolute, distance, weld, and prismatic joints. The polygon narrow-phase and the revolute joint solve are wired into the assembled `gb_world_step` behind the `GB_ENABLE_POLYGONS` and `GB_ENABLE_JOINTS` build flags, so a step over a mixed scene dispatches circle, edge, and polygon contacts and runs the joint solve in island order. The forward direction widens the constraint set and the launcher while holding the bit-identical guarantee.
+The shape set now spans circles, edges, and convex polygons, with circle, edge-circle, polygon-polygon, polygon-circle, and the dedicated edge-polygon narrow-phase; the contact solver covers the one-point and two-point block paths, and the joint set covers the revolute, distance, weld, prismatic, and pulley joints. The polygon narrow-phase and the revolute joint solve are wired into the assembled `gb_world_step` behind the `GB_ENABLE_POLYGONS` and `GB_ENABLE_JOINTS` build flags, so a step over a mixed scene dispatches circle, edge, and polygon contacts and runs the joint solve in island order. The forward direction widens the constraint set and the launcher while holding the bit-identical guarantee.
 
 1. A CUDA batched launcher on top of the Python binding, so the same `Batch` API a user drives on a CPU steps on the GPU through the SoA-global path. The host driver and the pybind11 module are in [bindings/](bindings/); the device upload-step-download path is the remaining piece.
-2. The remaining joint types: the pulley and gear joints, each on the same accessor contract with a 0-ULP micro-test, reusing the `GBMat22` and `GBMat33` ops the existing joints carry.
+2. The gear joint, which couples two other joints with a ratio, on the same accessor contract with a 0-ULP micro-test, reusing the `GBMat22` and `GBMat33` ops the existing joints carry.
 3. Wiring the chain shape (`b2ChainShape`) into the assembled step as a per-world static collider. The chain's child-edge generation is validated 0-ULP and feeds the adjacency-aware edge collider; the remaining work is per-world chain storage behind the accessors and a child-edge loop in the narrow-phase.
 4. Per-point warm-start id matching for polygon contacts, so a contact whose clip features change between substeps carries impulse by matching feature id per surviving point.
 

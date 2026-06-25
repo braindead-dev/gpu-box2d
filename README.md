@@ -1,6 +1,6 @@
 # gpu-box2d
 
-A GPU-accelerated port of Box2D 2.3.0 that runs thousands of independent, bit-faithful 2D physics worlds in parallel on a single GPU.
+A GPU-accelerated port of Box2D 2.3.0 that runs thousands of independent, bit-faithful 2D physics worlds in parallel on a single GPU. It handles circles, edges, and convex polygons, the single-point and two-point block contact solvers, continuous collision, and revolute joints, each verified bit-for-bit against Box2D 2.3.0.
 
 ## What it does
 
@@ -8,7 +8,7 @@ Reinforcement learning and large-scale simulation need to step many independent 
 
 Bit-identicality is the point. A position-based or re-implemented 2D solver runs fast on a GPU but produces different physics, which silently shifts the dynamics an agent trains against. This engine ports Box2D 2.3.0 phase for phase and reproduces its floats exactly, so a policy trained on the GPU batch behaves the same against the CPU engine. You get the throughput of batched GPU simulation and the dynamics of the reference engine at the same time.
 
-The physics core is a general, header-only CUDA library with no application logic baked in. An application plugs in through a generic contact listener and the per-world field hooks; the fruit-merge game under `examples/` is one such application and lives entirely outside the core.
+The physics core is a general, header-only CUDA library with no application logic baked in. It covers the shape, contact, and joint set a 2D rigid-body engine needs: circles, edges, and convex polygons; one-point and two-point contact manifolds with the block solver; the broad-phase, the island solver, continuous collision, and the revolute joint. An application plugs in through a generic contact listener and the per-world field hooks; the fruit-merge game under `examples/` is one such application and lives entirely outside the core.
 
 ## Design
 
@@ -43,6 +43,8 @@ Verification runs two controls. Each module is compared in ULP against a golden 
 Validated on an A10 (sm_86) with CUDA 12.8.
 
 - **Single-world physics is bit-identical.** A circle settling on a static edge, a stack of circles, and a settling pile are 0 ULP against the CPU Box2D reference over hundreds of substeps, including the CCD path. The GPU device path is 0 ULP against the host path of the same source on every scenario, so the GPU adds no floating-point drift of its own.
+- **Polygons and the two-point block solver are bit-identical.** The polygon mass formula, the `b2CollidePolygons` two-point manifold, the `b2CollidePolygonAndCircle` manifold, and the two-point block-solver LCP cascade through the full velocity and position spine are 0 ULP against the Box2D 2.3.0 reference.
+- **The revolute joint is bit-identical.** A two-body pendulum on a point-to-point revolute joint is 0 ULP against the Box2D 2.3.0 reference over hundreds of substeps.
 - **Batched output matches the reference in distribution.** Against the CPU batch reference of the example application, the output distribution agrees at a Kolmogorov-Smirnov p-value of 1.0, with per-world state byte-exact.
 - **Throughput is about 23K env-steps per second**, roughly 12x a 26-core CPU baseline and about 2x the pre-rewrite version. This is the measured ceiling for a bit-identical Box2D Gauss-Seidel solver on this card. The serial solver is about 74 percent of a step and resists parallelizing while preserving the bit match, and occupancy plus data-dependent control flow bound the rest. Throughput scales with the GPU, so a larger card lifts the absolute number. [docs/performance.md](docs/performance.md) has the full breakdown.
 
@@ -85,29 +87,33 @@ ARCH=86 ./test/run_gate.sh
 
 ## Status
 
-The engine is complete and validated for circles and static edges. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate.
+The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate.
 
 | Component | Status |
 |---|---|
 | Bit-identical single-world physics (drop, stack, settling pile) | validated, 0 ULP over hundreds of substeps |
 | Narrow-phase manifolds (circle, edge) | validated, 0 ULP |
+| Polygon shape (`b2PolygonShape`: box, hull, mass, AABB) | validated, 0 ULP |
+| Polygon narrow-phase (`b2CollidePolygons`, `b2CollidePolygonAndCircle`) | validated, 0 ULP on the one- and two-point manifolds |
+| Two-point block solver (the LCP block path for polygon contacts) | validated, 0 ULP through the full velocity and position spine |
 | Broad-phase (`b2DynamicTree` + `b2BroadPhase`) | validated, exact proxyId and AddPair order |
 | Contact solver and island (sequential-impulse + DFS assembly) | validated, 0 ULP |
 | CCD / TOI (GJK distance + `b2TimeOfImpact` + SolveTOI) | validated, 0 ULP on the circle-edge sweep |
+| Revolute joint (`b2RevoluteJoint`, point-to-point) | validated, 0 ULP on a pendulum over hundreds of substeps |
 | Thread-per-world SoA execution (production path) | validated, about 23K env-steps/s on an A10 |
 | Block-per-world shared-memory execution | built and measured, slower (see performance.md) |
 | Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
-| Polygons, two-point block solver, joints | extension targets, see docs/extending.md |
 
 ## Roadmap
 
-The circle-and-edge core is done and the execution model is settled. The forward direction is generalizing the shape and constraint set while keeping the bit-identical guarantee, plus a clean batched launcher and Python bindings.
+The shape set now spans circles, edges, and convex polygons, the contact solver covers the one-point and two-point block paths, and the revolute joint is in. The forward direction widens the constraint set and the launcher while holding the bit-identical guarantee.
 
 1. A general batched launcher and Python bindings, so the engine drops into a training loop as a library.
-2. Polygons: `b2PolygonShape`, the `b2CollidePolygons` and `b2CollidePolygonAndCircle` narrow-phase, the polygon mass formula, and the two-point block solver for polygon contacts.
-3. Joints: the per-type constraint rows (revolute first) and the joint-contact solve interleave.
+2. The revolute motor and angle-limit rows (the 3x3 path on top of the point-to-point joint that is already in), then the remaining joint types: prismatic, distance, weld, and pulley, each on the same accessor contract with a 0-ULP micro-test.
+3. The chain and the general edge shape (vertex0/vertex3 connectivity), so swept polygon soup works as a static collider.
+4. Wiring the polygon narrow-phase and the joint solve into the assembled `gb_step` so a batched run drives mixed shape and joint scenes, with the shape tag dispatching circle, edge, and polygon contacts.
 
-Two earlier roadmap items are now closed findings rather than open work. Making dense connected islands bit-identical is not achievable: the residual is irreducible float32 rounding in large islands, reproduced by both the faithful broad-phase and the colored solver, so it is documented as a known property in [docs/fidelity.md](docs/fidelity.md). Block-parallelizing the phases was built and measured slower than thread-per-world and is documented as a rejected approach in [docs/performance.md](docs/performance.md).
+Two earlier roadmap items are now closed findings. Making dense connected islands bit-identical is unreachable: the residual is irreducible float32 rounding in large islands, reproduced by both the faithful broad-phase and the colored solver, so it is documented as a known property in [docs/fidelity.md](docs/fidelity.md). Block-parallelizing the phases was built and measured slower than thread-per-world and is documented as a rejected approach in [docs/performance.md](docs/performance.md).
 
 Each new module ships a 0-ULP micro-test before it joins the assembled step. See [docs/extending.md](docs/extending.md) for the concrete path.
 
@@ -116,7 +122,7 @@ Each new module ships a 0-ULP micro-test before it joins the assembled step. See
 - [docs/architecture.md](docs/architecture.md): thread-per-world execution, the SoA memory layout, and the serial-solver fidelity rule.
 - [docs/fidelity.md](docs/fidelity.md): how bit-identicality is verified and what is verified.
 - [docs/performance.md](docs/performance.md): the measured throughput, the structural ceiling, GPU scaling, and the two measured-and-rejected execution models.
-- [docs/extending.md](docs/extending.md): adding shapes, the two-point solver, and joints.
+- [docs/extending.md](docs/extending.md): how polygons, the two-point solver, and the revolute joint were added, and the path for the next shape, solver row, and joint type.
 
 ## License
 

@@ -145,12 +145,14 @@ diverges.
 | `gb_math.cuh` | vector, rotation, transform ops (b2Math) |
 | `gb_pools.cuh` | the `WorldShared` field set and the accessor macros |
 | `gb_soa_backend.cuh` | the transposed SoA lane-equals-world backend (production) |
-| `gb_contact_types.cuh` | the shared manifold, constraint, and island types |
+| `gb_contact_types.cuh` | the shared manifold, constraint, block-matrix, and island types |
 | `gb_world.cuh` | the step declaration, the thread-per-world launch, and the block shell |
 | `gb_broadphase.cuh` | `b2DynamicTree` + `b2BroadPhase` |
-| `gb_collision.cuh` | narrow-phase manifolds |
-| `gb_contact_solver.cuh` | sequential-impulse solver |
+| `gb_polygon.cuh` | `b2PolygonShape` (box, hull, mass, AABB) |
+| `gb_collision.cuh` | narrow-phase manifolds (circle, edge, polygon) |
+| `gb_contact_solver.cuh` | sequential-impulse solver, single-point and two-point block paths |
 | `gb_island.cuh` | island assembly, integration, sleep |
+| `gb_joint.cuh` | `b2RevoluteJoint` (point-to-point) |
 | `gb_toi.cuh` | GJK distance + `b2TimeOfImpact` |
 | `gb_step.cuh` | the assembly point that wires modules into the step |
 | `gb_colored_solver.cuh` | the graph-colored parallel solver (alternative speed path) |

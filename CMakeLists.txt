@@ -59,6 +59,33 @@ if(GPU_BOX2D_BUILD_TESTS)
   set_tests_properties(gb_broadphase PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_broadphase")
 
+  # Polygon narrow-phase and mass formula. Self-contained (embeds its Box2D 2.3.0
+  # polygon reference). Validated, 0 ULP.
+  add_executable(gb_polygon_test test/gb_polygon_test.cu)
+  target_link_libraries(gb_polygon_test PRIVATE gpu_box2d)
+  target_include_directories(gb_polygon_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  add_test(NAME gb_polygon COMMAND gb_polygon_test)
+  set_tests_properties(gb_polygon PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_polygon")
+
+  # Two-point block solver. Self-contained (embeds its Box2D 2.3.0 b2ContactSolver
+  # reference). Validated, 0 ULP.
+  add_executable(gb_block_solver_test test/gb_block_solver_test.cu)
+  target_link_libraries(gb_block_solver_test PRIVATE gpu_box2d)
+  target_include_directories(gb_block_solver_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  add_test(NAME gb_block_solver COMMAND gb_block_solver_test)
+  set_tests_properties(gb_block_solver PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_block_solver")
+
+  # Revolute joint (point-to-point). Self-contained (embeds its Box2D 2.3.0
+  # b2RevoluteJoint reference). Validated, 0 ULP.
+  add_executable(gb_joint_test test/gb_joint_test.cu)
+  target_link_libraries(gb_joint_test PRIVATE gpu_box2d)
+  target_include_directories(gb_joint_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  add_test(NAME gb_joint COMMAND gb_joint_test)
+  set_tests_properties(gb_joint PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_joint")
+
   if(GPU_BOX2D_BUILD_REF_TESTS AND GPU_BOX2D_REF_INCLUDE)
     add_executable(gb_toi_test test/gb_toi_test.cu)
     target_link_libraries(gb_toi_test PRIVATE gpu_box2d)

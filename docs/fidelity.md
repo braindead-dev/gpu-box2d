@@ -70,10 +70,13 @@ verifiable while it is built, rather than validating only at the end.
 |---|---|---|
 | math | b2Math ops | yes, same ops in the same order |
 | collision | b2CollideCircles / b2CollideEdgeAndCircle / worldManifold | yes |
+| polygon | b2PolygonShape mass / b2CollidePolygons / b2CollidePolygonAndCircle | yes |
 | broad-phase | b2DynamicTree proxyId sequence + AddPair order | yes, integer-exact |
-| contact solver | b2ContactSolver velocity + position iters | yes, serial sweep |
+| contact solver | b2ContactSolver velocity + position iters (1-point and 2-point block) | yes, serial sweep |
+| block solver | b2ContactSolver two-point LCP cascade + 2x2 block | yes |
 | island | b2Island::Solve integrate / sleep + DFS order | yes |
 | ccd | b2TimeOfImpact / b2Distance (GJK) | yes |
+| joint | b2RevoluteJoint init / velocity / position (point-to-point) | yes |
 
 ## What is verified
 
@@ -83,6 +86,17 @@ The following are green at 0 ULP against the CPU Box2D reference:
   a settling pile are bit-identical over hundreds of substeps, including the CCD path.
 - **Narrow-phase.** `b2CollideCircles`, `b2CollideEdgeAndCircle`, and the world
   manifold reproduce Box2D's manifolds and touching transitions exactly.
+- **Polygons.** `test/gb_polygon_test.cu` reproduces the polygon mass formula, the
+  `b2CollidePolygons` two-point manifold, and the `b2CollidePolygonAndCircle`
+  manifold at 0 ULP, including the local normal, the plane point, both clip points,
+  and the contact ids.
+- **Two-point block solver.** `test/gb_block_solver_test.cu` drives the full velocity
+  and position spine on a box resting on the ground and reproduces every body
+  kinematic and both warm-start impulses at 0 ULP, exercising the 2x2 block matrix,
+  its inverse, and the four-case LCP cascade.
+- **Revolute joint.** `test/gb_joint_test.cu` swings a two-body pendulum over
+  hundreds of substeps and reproduces the bob velocity, angular velocity, position,
+  angle, and the warm-start impulse at 0 ULP.
 - **Broad-phase.** `test/gb_broadphase_test.cu` produces the exact proxyId sequence and
   the exact AddPair order as Box2D for a fixed scene.
 - **Contact solver and island.** `test/gb_island_test.cu` reproduces the velocity and

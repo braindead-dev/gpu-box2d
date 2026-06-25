@@ -152,6 +152,17 @@ if(GPU_BOX2D_BUILD_TESTS)
   set_tests_properties(gb_wired_step PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_wired_step")
 
+  # Batch driver (the C++ layer the Python binding wraps). Self-contained. Validates
+  # the driver against the standalone step at 0 ULP and checks the physics.
+  add_executable(gb_batch_test test/gb_batch_test.cu)
+  target_link_libraries(gb_batch_test PRIVATE gpu_box2d)
+  target_include_directories(gb_batch_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/test ${CMAKE_CURRENT_SOURCE_DIR}/bindings)
+  target_compile_definitions(gb_batch_test PRIVATE GB_ENABLE_POLYGONS GB_ENABLE_JOINTS)
+  add_test(NAME gb_batch COMMAND gb_batch_test)
+  set_tests_properties(gb_batch PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_batch")
+
   if(GPU_BOX2D_BUILD_REF_TESTS AND GPU_BOX2D_REF_INCLUDE)
     add_executable(gb_toi_test test/gb_toi_test.cu)
     target_link_libraries(gb_toi_test PRIVATE gpu_box2d)

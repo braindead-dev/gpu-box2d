@@ -65,6 +65,22 @@ gb_launch_thread_step(pools);       // one thread per world steps every world
 
 An application plugs in through two seams, never touching the physics. It overrides the generic contact listener (`gbOnTouchBegin` / `gbOnTouchEnd`, the begin-contact and end-contact hooks) to react to touching transitions, and it injects its own per-world fields through `GB_WORLD_USER_FIELDS`. The fruit-merge example under [examples/fruit_merge/](examples/fruit_merge/) is a worked instance: it records same-tier touches in its begin-contact hook, then merges them after the step. The core never learns what a fruit is; it sees circles with a radius and a mass, read through `gbCircleRadius`.
 
+### Python
+
+A batched world driver and a pybind11 module let an RL or simulation layer drive N worlds from Python and read per-world state as numpy arrays. The API is game-agnostic: it speaks bodies, joints, the static boundary, and the step.
+
+```python
+import gpu_box2d as gb
+batch = gb.Batch(n_worlds=4096)
+for w in range(batch.n_worlds):
+    batch.set_ground_edge(w, 0, -10.0, 0.0, 10.0, 0.0)
+    batch.add_circle(w, 0.0, 3.0, 0.5, inv_mass=1.0, inv_i=2.0, body_type=gb.DYNAMIC_BODY)
+batch.step(substeps=1)
+pos = batch.positions()      # [n_worlds, max_bodies, 2]
+```
+
+The host build steps on the CPU and is bit-identical to a single-threaded host Box2D 2.3.0; the same driver compiles for CUDA and steps the same seeded state on the GPU. See [bindings/](bindings/) for the install steps and the full obs/state API.
+
 ## Build
 
 Requires CUDA 12.x and a GPU of compute capability 6.0 or later. Developed and validated on an A10 (sm_86) with CUDA 12.8.
@@ -93,7 +109,7 @@ CXX=clang++ ./test/run_gate_host.sh
 
 ## Status
 
-The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, eleven micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
+The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, twelve micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
 
 | Component | Status |
 |---|---|
@@ -115,13 +131,14 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Thread-per-world SoA execution (production path) | validated, about 23K env-steps/s on an A10 |
 | Block-per-world shared-memory execution | built and measured, slower (see performance.md) |
 | Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
-| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 11 micro-tests, 0 red |
+| Python binding (batched driver + pybind11, numpy obs/state API) | validated host-mode, driver 0 ULP vs the standalone step |
+| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 12 micro-tests, 0 red |
 
 ## Roadmap
 
 The shape set now spans circles, edges, and convex polygons, with circle, edge-circle, polygon-polygon, polygon-circle, and the dedicated edge-polygon narrow-phase; the contact solver covers the one-point and two-point block paths, and the joint set covers the revolute, distance, weld, and prismatic joints. The polygon narrow-phase and the revolute joint solve are wired into the assembled `gb_world_step` behind the `GB_ENABLE_POLYGONS` and `GB_ENABLE_JOINTS` build flags, so a step over a mixed scene dispatches circle, edge, and polygon contacts and runs the joint solve in island order. The forward direction widens the constraint set and the launcher while holding the bit-identical guarantee.
 
-1. A general batched launcher and Python bindings, so the engine drops into a training loop as a library.
+1. A CUDA batched launcher on top of the Python binding, so the same `Batch` API a user drives on a CPU steps on the GPU through the SoA-global path. The host driver and the pybind11 module are in [bindings/](bindings/); the device upload-step-download path is the remaining piece.
 2. The remaining joint paths: the revolute motor and angle-limit rows (the 3x3 path on top of the point-to-point joint that is already in, reusing the `GBMat33` ops the weld and prismatic joints carry), and the pulley and gear joints, each on the same accessor contract with a 0-ULP micro-test.
 3. Wiring the chain shape (`b2ChainShape`) into the assembled step as a per-world static collider. The chain's child-edge generation is validated 0-ULP and feeds the adjacency-aware edge collider; the remaining work is per-world chain storage behind the accessors and a child-edge loop in the narrow-phase.
 4. Per-point warm-start id matching for polygon contacts, so a contact whose clip features change between substeps carries impulse by matching feature id per surviving point.

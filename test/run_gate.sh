@@ -155,6 +155,18 @@ else
   bad "gb_wired_step failed to build"
 fi
 
+# Batch driver (the C++ layer the Python binding wraps): self-contained. Validates the
+# driver produces correct physics and is bit-identical to the standalone step.
+if nvcc $FLAGS -DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS -I"$INC" -I"$ROOT/bindings" -I"$HERE" "$HERE/gb_batch_test.cu" -o "$HERE/gb_batch_test" 2>/dev/null; then
+  if "$HERE/gb_batch_test" 2>&1 | grep -q "PASS gb_batch"; then
+    ok "gb_batch (batched driver matches standalone step, 0 ULP)"
+  else
+    bad "gb_batch diverged"
+  fi
+else
+  bad "gb_batch failed to build"
+fi
+
 # The CCD (gb_toi) and solver/island (gb_contact_solver + gb_island) micro-tests
 # compile against the Box2D 2.3.0 reference translation unit. That reference is
 # wired in once the narrow-phase and solver modules are assembled. Until then,

@@ -25,6 +25,11 @@ test/*_test_host
 *.cudafe*
 *.module_id
 
+# Python binding build artifacts
+__pycache__/
+*.egg-info/
+*.pyc
+
 # Scratch and editor files
 *.tmp
 *.log

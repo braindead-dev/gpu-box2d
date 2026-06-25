@@ -135,6 +135,10 @@ The following are green at 0 ULP against the CPU Box2D reference:
   `b2TimeOfImpact` result at 0 ULP on a circle-edge continuous-collision sweep.
 - **The execution model.** The GPU device path is 0 ULP against the host path of the
   same source on every scenario, so the execution model adds no drift of its own.
+- **The batched driver.** `test/gb_batch_test.cu` drives the batched-world driver (the
+  C++ layer the Python binding wraps) and reproduces the standalone `gb_world_step`
+  result at 0 ULP over hundreds of steps, so the driver and the Python binding add no
+  drift; they speak the same bit-identical physics.
 
 For a batched application, the example layer's output distribution agrees with its CPU
 batch reference at a Kolmogorov-Smirnov p-value of 1.0, with per-world application state
@@ -177,7 +181,7 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports eleven green micro-tests and zero red:
+flags, `test/run_gate.sh` reports twelve green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
@@ -191,7 +195,8 @@ GREEN  gb_distance_joint (rigid rod + soft spring, 0 ULP)
 GREEN  gb_weld_joint (rigid + soft weld, 3x3 path, 0 ULP)
 GREEN  gb_prismatic_joint (free + limit + motor, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
-GATE SUMMARY: 11 green, 0 red
+GREEN  gb_batch (batched driver matches standalone step, 0 ULP)
+GATE SUMMARY: 12 green, 0 red
 ALL GREEN.
 ```
 

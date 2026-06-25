@@ -1,8 +1,10 @@
 # Extending toward full Box2D
 
-The current core covers circles and static edges, the single-point contact solver,
-and the CCD path. Box2D supports polygons, two-point manifolds, and joints. This
-document is the path to adding them while keeping the bit-identical guarantee.
+The core covers circles, edges, and convex polygons, the single-point and two-point
+contact solvers, continuous collision, and the revolute joint. This document records
+how the polygon and joint layers were added on the accessor contract, and gives the
+concrete path for the next shape, solver row, and joint type. Every step keeps the
+bit-identical guarantee.
 
 ## The two rules that never bend
 
@@ -21,66 +23,90 @@ Before any extension, two constraints hold for every line of new code.
 Every extension ships with a 0-ULP micro-test against the Box2D 2.3.0 reference
 before it joins the assembled step. The template is in `test/MICROTEST_TEMPLATE.md`.
 
-## Adding polygons
+## Polygons (shipped)
 
-Polygons add a shape type, narrow-phase functions, and a mass formula.
+Polygon support adds a shape type, narrow-phase functions, and a mass formula. It
+lives in `gb_polygon.cuh` and the polygon section of `gb_collision.cuh`.
 
-- **Shape data.** A polygon needs its vertices, normals, and centroid. Store them in
-  `WorldShared` as fixed-capacity arrays indexed by body slot, behind new `BODY`
-  accessors. Keep a per-body shape tag (circle or polygon) so the narrow-phase can
-  dispatch.
-- **Narrow-phase.** Port `b2CollidePolygons` and `b2CollidePolygonAndCircle` from
-  Box2D 2.3.0 into `gb_collision.cuh`. These produce up to two manifold points and a
-  reference face, which is what motivates the two-point solver below. The clipping
-  order and the incident-edge selection must match Box2D exactly.
-- **Mass.** `b2PolygonShape::ComputeMass` integrates over the polygon. Port it as
-  written; the centroid and rotational inertia feed the solver's `invMass` and
-  `invI`.
-- **Broad-phase.** Polygons need a tight AABB from their rotated vertices. Add a
-  `gbPolygonAABB` helper next to `gbCircleAABB` in `gb_broadphase.cuh`. The rest of
-  the tree is shape-agnostic and needs no change.
+- **Shape data.** `GBPolygon` in `gb_polygon.cuh` holds the vertices, outward edge
+  normals, centroid, count, and skin radius. `gbPolygonSetAsBox` builds a box,
+  `gbPolygonSet` builds a convex hull with the gift-wrap algorithm in Box2D's vertex
+  order, and `gbPolygonComputeMass` integrates the triangles for mass, center, and
+  inertia. `gb_polygon_test.cu` checks the box mass formula at 0 ULP.
+- **Narrow-phase.** `gbCollidePolygons` ports `b2CollidePolygons`: reference-face
+  selection through `gbFindMaxSeparation` and `gbEdgeSeparation`, incident-edge
+  selection through `gbFindIncidentEdge`, and the two-sided clip through
+  `gbClipSegmentToLine`. It produces up to two manifold points and a reference face.
+  `gbCollidePolygonAndCircle` ports the circle case. The clip order, the
+  reference-face choice, and the contact-id features match Box2D exactly.
+  `gb_polygon_test.cu` checks the two-point box-on-box manifold and the
+  polygon-circle manifold at 0 ULP, including the local normal, the plane point, both
+  clip points, and the ids.
+- **Broad-phase.** A polygon needs a tight AABB from its rotated vertices.
+  `gbPolygonComputeAABB` in `gb_polygon.cuh` produces it. The tree in
+  `gb_broadphase.cuh` is shape-agnostic and needs no change.
 
-## The two-point solver
+## The two-point block solver (shipped)
 
 Circles produce one contact point. Polygons produce up to two, and Box2D solves a
-two-point manifold with a block solver that handles both points together when it can.
+two-point manifold with a block solver that handles both points together when the
+matrix is well conditioned. The solver in `gb_contact_solver.cuh` carries both paths.
 
-- **Constraint.** Extend `GBConstraint` in `gb_contact_types.cuh` to carry two
-  points. The fused velocity and position fields become arrays of two.
-- **Block solve.** Port `b2ContactSolver::SolveVelocityConstraints`'s two-point block
-  path. It attempts a 2x2 solve of both normal impulses and falls back to two
-  sequential single-point solves through a fixed cascade of cases. Reproduce the
-  cascade in order; the fallback branch taken is part of the result.
-- **Order.** The two points within a contact solve in Box2D's order, and contacts
-  still solve in island order. The serial-in-order solver rule covers both.
-- **Test.** A box resting on the ground exercises the two-point block solver
-  directly. Compare every body's post-solve kinematics and both warm-start impulses
-  at 0 ULP.
+- **Constraint.** `GBConstraint` in `gb_contact_types.cuh` carries two velocity
+  points (`p`, `p2`), the 2x2 block matrix `K`, its inverse `normalMass22`, and a
+  `pointCount` of 1 or 2. A 1-point contact uses point 0 alone, so the single-point
+  result stays byte-identical.
+- **Block solve.** `gbSolveVelocity` runs the friction solve per point, then for a
+  two-point contact runs the total-enumeration LCP through the fixed four-case
+  cascade from `b2ContactSolver::SolveVelocityConstraints`. The fallback branch taken
+  is part of the result, so the cascade runs in Box2D order.
+- **Two-point position solve.** `gbSolvePosition` solves both points in order with
+  the face-A and face-B position manifolds, feeding the same `minSeparation` fold.
+- **Test.** `gb_block_solver_test.cu` drives the full velocity and position spine on
+  a box resting on the ground (a two-point face manifold) and compares every body
+  kinematic and both warm-start impulses against the Box2D 2.3.0 reference at 0 ULP.
 
-## Joints
+## The revolute joint (shipped, point-to-point)
 
-Joints add constraint rows that solve alongside contacts in `b2Island::Solve`.
+`gb_joint.cuh` ports `b2RevoluteJoint`'s point-to-point case: the two-degree-of-
+freedom anchor constraint solved with the 2x2 mass matrix in both the velocity solve
+and the position solve.
 
-- **Storage.** Add a joint pool to `WorldShared` (anchors, reference angles, per-type
-  parameters) behind `JOINT` accessors in the same style as `CONT`.
-- **Solve.** Each joint type (revolute, prismatic, distance, weld, and so on) has its
-  own `InitVelocityConstraints`, `SolveVelocityConstraints`, and
-  `SolvePositionConstraints`. Box2D solves joints and contacts in a fixed interleave
-  within each velocity and position iteration. Reproduce that interleave; joints
-  before contacts, in joint-list order, then contacts in contact order.
-- **Island assembly.** Extend the DFS in `gb_island.cuh` to walk joint edges as well
-  as contact edges so joint-connected bodies land in the same island, matching
-  Box2D's graph traversal.
-- **Test.** A two-body pendulum on a revolute joint, settled over many substeps,
-  compared at 0 ULP.
+- **Storage.** `GBRevoluteJoint` carries the island-local body indices, the body-local
+  anchors, the inverse mass and inertia, the solver arms `rA` / `rB`, the 2x2 mass
+  matrix, and the accumulated impulse for warm-start.
+- **Solve.** `gbRevoluteInitVelocity` builds the arms and the mass matrix and applies
+  the warm-start impulse; `gbRevoluteSolveVelocity` runs one velocity iteration
+  through `gbMat22Solve`; `gbRevoluteSolvePosition` runs one position iteration and
+  returns whether the position error is within the linear slop.
+- **Test.** `gb_joint_test.cu` swings a two-body pendulum over hundreds of substeps
+  and compares the bob velocity, angular velocity, position, angle, and the
+  warm-start impulse against the Box2D 2.3.0 reference at 0 ULP.
+
+## Adding the next module
+
+The same path extends the engine further.
+
+- **More joint types.** The revolute motor and angle-limit rows add the 3x3 path
+  (`b2Mat33::Solve22` / `Solve33`) on top of the point-to-point joint. Prismatic,
+  distance, weld, and pulley each have their own `InitVelocityConstraints`,
+  `SolveVelocityConstraints`, and `SolvePositionConstraints`. Box2D solves joints
+  before contacts within each velocity and position iteration, in joint-list order;
+  reproduce that interleave in the per-island driver.
+- **Island assembly with joints.** Extend the DFS in `gb_island.cuh` to walk joint
+  edges as well as contact edges, so joint-connected bodies land in the same island
+  in Box2D's graph-traversal order.
+- **More shapes.** The chain shape and the general edge (with vertex0/vertex3
+  connectivity) follow the polygon pattern: shape data behind new accessors, a
+  narrow-phase ported in order, and a tight AABB helper.
 
 ## Growing the bounds
 
 Polygons and joints enlarge the per-world working set. The bounds are compile-time
-defines in `gb_pools.cuh` (`GB_MAX_BODIES`, `GB_MAX_CONTACTS`, `GB_MAX_PAIRS`).
-Raising them grows `WorldShared`. If the result exceeds the 48 KB default shared
-budget, use the 100 KB shared opt-in on sm_86 and later, or move cold per-world
-state (game scalars, infrequently touched fields) to global storage behind the
+defines in `gb_pools.cuh` (`GB_MAX_BODIES`, `GB_MAX_CONTACTS`) and `gb_polygon.cuh`
+(`GB_MAX_POLYGON_VERTICES`). Raising them grows `WorldShared`. If the result exceeds
+the 48 KB default shared budget, use the 100 KB shared opt-in on sm_86 and later, or
+move cold per-world state (infrequently touched fields) to global storage behind the
 accessors. The shared budget is the design constraint to track. Because every access
 goes through the accessors, moving a field between shared and global is a backend
 change that leaves every call site untouched.

@@ -61,12 +61,13 @@ expands the same macro to a direct `w.sweepCx[s]`. Both backends compute the sam
 values in the same order. The macro changes addressing only. Keeping every module
 behind these accessors is what makes the memory layout a build-time choice.
 
-The field set is the frozen contract, defined as `WorldShared` in
-`include/gpu_box2d/gb_pools.cuh`: bodies, contacts, merge pairs, and scalars. The
-bounds are sized against measured peaks (the defaults are 65 bodies, 128 contacts, 48
-merge pairs), which keeps the per-world working set small enough that the SoA arrays
-stay bandwidth-friendly and the alternative shared-memory shell fits the 48 KB default
-block budget with headroom. sm_86 and later offer a 100 KB opt-in for larger bounds.
+The field set is the general physics contract, defined as `WorldShared` in
+`include/gpu_box2d/gb_pools.cuh`: bodies, contacts, and physics scalars. The defaults
+(65 bodies, 128 contacts) keep the per-world working set small enough that the SoA
+arrays stay bandwidth-friendly and the alternative shared-memory shell fits the 48 KB
+default block budget with headroom. sm_86 and later offer a 100 KB opt-in for larger
+bounds. An application adds its own per-world fields through `GB_WORLD_USER_FIELDS`
+without editing the core struct.
 
 ## The serial-in-order solver rule
 
@@ -144,12 +145,14 @@ diverges.
 | `gb_math.cuh` | vector, rotation, transform ops (b2Math) |
 | `gb_pools.cuh` | the `WorldShared` field set and the accessor macros |
 | `gb_soa_backend.cuh` | the transposed SoA lane-equals-world backend (production) |
-| `gb_contact_types.cuh` | the shared manifold, constraint, and island types |
+| `gb_contact_types.cuh` | the shared manifold, constraint, block-matrix, and island types |
 | `gb_world.cuh` | the step declaration, the thread-per-world launch, and the block shell |
 | `gb_broadphase.cuh` | `b2DynamicTree` + `b2BroadPhase` |
-| `gb_collision.cuh` | narrow-phase manifolds |
-| `gb_contact_solver.cuh` | sequential-impulse solver |
+| `gb_polygon.cuh` | `b2PolygonShape` (box, hull, mass, AABB) |
+| `gb_collision.cuh` | narrow-phase manifolds (circle, edge, polygon) |
+| `gb_contact_solver.cuh` | sequential-impulse solver, single-point and two-point block paths |
 | `gb_island.cuh` | island assembly, integration, sleep |
+| `gb_joint.cuh` | `b2RevoluteJoint` (point-to-point) |
 | `gb_toi.cuh` | GJK distance + `b2TimeOfImpact` |
 | `gb_step.cuh` | the assembly point that wires modules into the step |
 | `gb_colored_solver.cuh` | the graph-colored parallel solver (alternative speed path) |

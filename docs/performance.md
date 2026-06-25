@@ -8,8 +8,8 @@ numbers are from an A10 (sm_86) with CUDA 12.8.
 ## The measured result
 
 The production engine runs at about **23K env-steps per second** on an A10. An
-env-step is one drop-and-settle of a fruit-merge world, which is tens to a few hundred
-physics substeps. That is:
+env-step is one drop-and-settle of a world (the example application's unit of work),
+which is tens to a few hundred physics substeps. That is:
 
 - roughly **12x** a 26-core CPU baseline running the same Box2D 2.3.0 algorithm, and
 - about **2x** the pre-rewrite GPU version.

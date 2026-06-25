@@ -49,6 +49,10 @@
 // ---- manifold/shape tags (de-virtualized) ----
 #define GB_SHAPE_CIRCLE          0
 #define GB_SHAPE_EDGE            1
+#define GB_SHAPE_POLYGON         2
 #define GB_MANIFOLD_CIRCLES      0
 #define GB_MANIFOLD_FACE_A       1
 #define GB_MANIFOLD_FACE_B       2
+
+// ---- manifold capacity (b2_maxManifoldPoints) ----
+#define GB_MAX_MANIFOLD_POINTS   2

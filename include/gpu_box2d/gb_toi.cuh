@@ -3,7 +3,7 @@
 // (BODY/CONT/EDGE/SCAL, GBWorld).
 //
 // STATUS: validated. The GJK distance and b2TimeOfImpact results match Box2D
-// 2.3.0 bit-for-bit on the fruit-wall CCD scenario (see test/gb_toi_test.cu,
+// 2.3.0 bit-for-bit on the circle-edge CCD scenario (see test/gb_toi_test.cu,
 // 0-ULP). Box2D's CCD fires on dynamic-static contacts during settling and is
 // outcome-affecting, so a faithful engine must include it.
 //
@@ -58,8 +58,8 @@ GB_HD inline int gbProxySupport(const GBDProxy& p, V2 d){
 
 // Build proxy from world fields via accessors.
 // edge >= 0 and isA==true: the static edge side (ground fixture).
-// otherwise: circle (fruit body, m_p == 0).
-// fruitTier: call site supplies BODY(w,tier,body) to avoid needing tier_radius here.
+// otherwise: circle (m_p == 0); the call site supplies the radius
+// (gbCircleRadius(w, body)).
 GB_HD inline GBDProxy gbContactProxy(const GBWorld& w, int body, int edge, bool isA, float radius){
     GBDProxy p;
     if (edge >= 0 && isA){

@@ -35,6 +35,42 @@ else
   bad "gb_broadphase failed to build"
 fi
 
+# Polygon narrow-phase + mass: self-contained (embeds its Box2D 2.3.0 polygon
+# reference). Validated, 0-ULP.
+if nvcc $FLAGS -I"$INC" -I"$HERE" "$HERE/gb_polygon_test.cu" -o "$HERE/gb_polygon_test" 2>/dev/null; then
+  if "$HERE/gb_polygon_test" 2>&1 | grep -q "PASS gb_polygon"; then
+    ok "gb_polygon (mass + polygon-polygon + polygon-circle, 0 ULP)"
+  else
+    bad "gb_polygon diverged"
+  fi
+else
+  bad "gb_polygon failed to build"
+fi
+
+# Two-point block solver: self-contained (embeds its Box2D 2.3.0 b2ContactSolver
+# reference). Validated, 0-ULP.
+if nvcc $FLAGS -I"$INC" -I"$HERE" "$HERE/gb_block_solver_test.cu" -o "$HERE/gb_block_solver_test" 2>/dev/null; then
+  if "$HERE/gb_block_solver_test" 2>&1 | grep -q "PASS gb_block_solver"; then
+    ok "gb_block_solver (two-point LCP block solve, 0 ULP)"
+  else
+    bad "gb_block_solver diverged"
+  fi
+else
+  bad "gb_block_solver failed to build"
+fi
+
+# Revolute joint (point-to-point): self-contained (embeds its Box2D 2.3.0
+# b2RevoluteJoint reference). Validated, 0-ULP.
+if nvcc $FLAGS -I"$INC" -I"$HERE" "$HERE/gb_joint_test.cu" -o "$HERE/gb_joint_test" 2>/dev/null; then
+  if "$HERE/gb_joint_test" 2>&1 | grep -q "PASS gb_joint"; then
+    ok "gb_joint (revolute pendulum, 0 ULP)"
+  else
+    bad "gb_joint diverged"
+  fi
+else
+  bad "gb_joint failed to build"
+fi
+
 # The CCD (gb_toi) and solver/island (gb_contact_solver + gb_island) micro-tests
 # compile against the Box2D 2.3.0 reference translation unit. That reference is
 # wired in once the narrow-phase and solver modules are assembled. Until then,

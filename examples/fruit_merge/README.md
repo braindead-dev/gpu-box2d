@@ -11,19 +11,23 @@ a clean test of a 2D rigid-body engine. It needs circles, static walls, stacking
 settling, sleep, and continuous collision for fast drops. Every one of those is
 physics. The merge rule, the score, the spawn queue, and the death check are game.
 
-`fm_game.cuh` keeps that split strict. The game touches the engine through three
+`fm_game.cuh` keeps that split strict. The game touches the engine through four
 seams and nothing else:
 
-1. **Body create and destroy.** `fmAddFruit` activates a body slot and sets its
+1. **The field hook.** `fm_fields.cuh` defines `GB_WORLD_USER_FIELDS` (and its SoA
+   mirror), which the core world struct picks up to carry the game's own per-world
+   state (tier, age, outline, the merge-pair store, and game scalars). The physics
+   core never reads any of these fields.
+2. **Body create and destroy.** `fmAddFruit` activates a body slot and sets its
    radius and tier; `fmDestroyFruit` deactivates one. A merge is two destroys and
    one create.
-2. **A ContactListener hook.** `fmMergeBeginContact` and `fmMergeEndContact` mirror
+3. **The contact listener.** `fmMergeBeginContact` and `fmMergeEndContact` mirror
    Box2D's `b2ContactListener`. The assembled step fires them on touching transitions
-   through the core's `gbOnTouchBegin` / `gbOnTouchEnd` seam, which `fm_engine.cuh`
-   wires to the game. The merge rule lives here. It records same-tier touching pairs in
-   insertion order and acts on them after the step, so the body set never changes
-   mid-solve.
-3. **The frozen accessors.** The game reads and writes world state through
+   through the core's generic `gbOnTouchBegin` / `gbOnTouchEnd` seam, which
+   `fm_engine.cuh` wires to the game. The merge rule lives here. It records same-tier
+   touching pairs in insertion order and acts on them after the step, so the body set
+   never changes mid-solve.
+4. **The frozen accessors.** The game reads and writes world state through
    `BODY` / `CONT` / `EDGE` / `SCAL`, the same contract the physics modules use.
 
 The physics core never learns what a fruit is. It sees circles with a radius and a
@@ -43,12 +47,15 @@ rules carry that:
 
 ## Files
 
+- `fm_fields.cuh`: the game's per-world fields, injected into the core world struct
+  through `GB_WORLD_USER_FIELDS` and its SoA mirror.
 - `fm_game.cuh`: the game layer (constants, RNG, the merge hook, body create and
   destroy, the settle-and-merge env-step, batch reset and respawn).
 - `fm_obs.cuh`: the observation encoding for reinforcement learning, byte-exact to the
   CPU reference.
 - `fm_engine.cuh`: the top-level header that composes the physics core with the game
-  layer through the touch hook. Include this to get the full fruit-merge engine.
+  layer through the field hook and the contact listener. Include this to get the full
+  fruit-merge engine.
 
 ## Status
 

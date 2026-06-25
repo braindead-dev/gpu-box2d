@@ -30,7 +30,7 @@ inline long ulpDiff(float a, float b){
     return labs((long)ai - (long)bi);
 }
 
-// ---- GPU kernel: runs gb_toi on a fruit-wall scenario -----------------------
+// ---- GPU kernel: runs gb_toi on a circle-edge CCD sweep ---------------------
 __global__ void runGBTOI(GBTOIOut* out_d,
                           GBDistOutput* dist_out_d,
                           // input proxy A: floor edge [(-3.75,0)-(3.75,0)], r=0.01
@@ -43,7 +43,7 @@ __global__ void runGBTOI(GBTOIOut* out_d,
     pA.v[0] = v2(eAx, eAy); pA.v[1] = v2(eBx, eBy);
     pA.count = 2; pA.radius = GB_POLYGON_RADIUS;
 
-    // Build circle proxy (fruit, m_p == 0)
+    // Build circle proxy (m_p == 0)
     GBDProxy pB;
     pB.v[0] = v2(0.0f, 0.0f); pB.count = 1; pB.radius = 0.25f;
 
@@ -154,7 +154,7 @@ int main(){
 
     bool pass = (maxULP == 0) && state_match && iters_match;
     if (pass)
-        printf("PASS gb_toi: 0 ULP (GJK distance + b2TOI, fruit-wall CCD scenario)\n");
+        printf("PASS gb_toi: 0 ULP (GJK distance + b2TOI, circle-edge CCD sweep)\n");
     else
         printf("FAIL gb_toi: maxULP=%ld state=%s iters=%s\n",
                maxULP, state_match?"ok":"MISMATCH", iters_match?"ok":"MISMATCH");

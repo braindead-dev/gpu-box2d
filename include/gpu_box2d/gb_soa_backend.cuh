@@ -25,7 +25,7 @@ struct WorldPoolsSoA {
     float* invMass;   // [ MAX*NW ], body
     float* invI;   // [ MAX*NW ], body
     float* radius;   // [ MAX*NW ], body
-    int* tier;   // [ MAX*NW ], body
+    int* userData;   // [ MAX*NW ], body
     int* bodyType;   // [ MAX*NW ], body
     float* sleepTime;   // [ MAX*NW ], body
     unsigned char* awake;   // [ MAX*NW ], body
@@ -50,27 +50,24 @@ struct WorldPoolsSoA {
     float* cPointLocalY;   // [ MAX*NW ], cont
     float* cNormalImpulse;   // [ MAX*NW ], cont
     float* cTangentImpulse;   // [ MAX*NW ], cont
+    int* cPointCount;   // [ MAX*NW ], cont (1 or 2)
+    float* cPointLocal2X;   // [ MAX*NW ], cont
+    float* cPointLocal2Y;   // [ MAX*NW ], cont
+    float* cNormalImpulse2;   // [ MAX*NW ], cont
+    float* cTangentImpulse2;   // [ MAX*NW ], cont
     float* cToi;   // [ MAX*NW ], cont
     int* cToiCount;   // [ MAX*NW ], cont
     unsigned char* cToiFlag;   // [ MAX*NW ], cont
     unsigned char* cEnabled;   // [ MAX*NW ], cont
     int* contactCount;   // [ NW ], scalar
-    int* pairLo;   // [ MAX*NW ], pair
-    int* pairHi;   // [ MAX*NW ], pair
-    int* pairA;   // [ MAX*NW ], pair
-    int* pairB;   // [ MAX*NW ], pair
-    int* pairCount;   // [ NW ], scalar
     unsigned char* stepComplete;   // [ NW ], scalar
-    int* score;   // [ NW ], scalar
-    int* drops;   // [ NW ], scalar
-    int* maxTier;   // [ NW ], scalar
-    int* goldapples;   // [ NW ], scalar
-    int* cur;   // [ NW ], scalar
-    int* nxt;   // [ NW ], scalar
-    unsigned char* dead;   // [ NW ], scalar
-    unsigned long long* rng;   // [ NW ], scalar
-    float* age;   // [ MAX*NW ], body
-    float* outline;   // [ MAX*NW ], body
+    // ---- application extension hook (mirror of GB_WORLD_USER_FIELDS) ----------
+    // An application injects a transposed pointer for each field it added to
+    // WorldShared by defining GB_WORLD_SOA_USER_FIELDS. The names must match the
+    // WorldShared field names so the BODY/CONT/EDGE/SCAL accessors resolve them.
+#ifdef GB_WORLD_SOA_USER_FIELDS
+    GB_WORLD_SOA_USER_FIELDS
+#endif
 };
 
 struct GBWorld { WorldPoolsSoA* p; int world; };

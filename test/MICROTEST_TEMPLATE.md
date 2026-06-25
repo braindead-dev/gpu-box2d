@@ -21,10 +21,12 @@ green micro-test. This is how the engine stays verifiable while it is built.
 |---|---|---|
 | math | b2Math.h ops (b2Mul / Cross / Dot / Normalize) | yes, same ops in the same order |
 | collision | b2CollideCircles / b2CollideEdgeAndCircle / worldManifold | yes |
+| polygon | b2PolygonShape mass / b2CollidePolygons / b2CollidePolygonAndCircle | yes |
 | broad-phase | b2DynamicTree proxyId sequence + AddPair order | yes, integer-exact |
-| contact solver | b2ContactSolver single-point velocity + position iters | yes, serial sweep |
+| contact solver | b2ContactSolver single-point and two-point velocity + position iters | yes, serial sweep |
 | island | b2Island::Solve integrate / sleep + DFS order | yes |
 | ccd | b2TimeOfImpact / b2Distance (GJK) | yes |
+| joint | b2RevoluteJoint point-to-point init / velocity / position | yes |
 
 ## Template
 

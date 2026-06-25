@@ -21,6 +21,7 @@
 //     min(n_fruits, MAXF). fm_game keeps fruits compacted in creation order, so slot
 //     order == the CPU fruit-vector order.
 #pragma once
+#include "fm_fields.cuh"           // inject the game's per-world fields into the core
 #include "gpu_box2d/gb_pools.cuh"
 #include "fm_game.cuh"   // fm_tier_radius + FM_* constants (shared game data)
 

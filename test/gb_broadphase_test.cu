@@ -2,6 +2,10 @@
 // This test is self-contained: it embeds a reference copy of the Box2D 2.3.0
 // broad-phase logic (Ref-prefixed types) so it builds and runs from this repo alone.
 //
+// Scene: three static ground edges (a floor and two side walls) plus N dynamic
+// circles dropped into the container, positioned so some circles overlap and some
+// stay isolated. This exercises proxy creation order and the AddPair set.
+//
 // Two checks (both required to pass):
 //   (A) proxyId assignment. Ground edges and N circle proxies created in fixture
 //       order must get exactly the same proxyIds as the Box2D 2.3.0 BroadPhase.
@@ -38,19 +42,19 @@
 // Geometry constants for the test scene (copy only what we need so we avoid
 // pulling in any reference WorldArena / V2 redefinition).
 // ---------------------------------------------------------------------------
-#define TEST_WALL_X       3.75f
-#define TEST_CONTAINER_H  9.5f
+#define TEST_WALL_X       3.75f      // container half-width
+#define TEST_CONTAINER_H  9.5f       // container height (side-wall length)
 #define TEST_N_EDGES      3
 // b2_polygonRadius = 2 * b2_linearSlop = 2 * 0.005 = 0.01
 #define TEST_POLY_RADIUS  (2.0f * 0.005f)
 
-// Circle radii by tier index, for the test scene (tiers 0-10)
-static float tier_radius_ref(int tier){
+// Circle radii by size class (a fixed table; the scene picks from it).
+static float circle_radius(int sizeClass){
     static const float r[11] = {
         0.24f, 0.32f, 0.40f, 0.56f, 0.72f,
         0.84f, 1.00f, 1.20f, 1.36f, 1.68f, 1.96f
     };
-    return (tier >= 0 && tier < 11) ? r[tier] : 0.24f;
+    return (sizeClass >= 0 && sizeClass < 11) ? r[sizeClass] : 0.24f;
 }
 
 // ---------------------------------------------------------------------------
@@ -269,22 +273,23 @@ static void refBpUpdatePairs(RefBP& bp){
 }
 
 // ---------------------------------------------------------------------------
-// Fixed test scene: 3 edges + 5 fruits of varying tiers placed to guarantee
+// Fixed test scene: 3 edges + 5 circles of varying sizes placed to guarantee
 // some overlapping pairs at initial UpdatePairs.
-// Tiers chosen so fruits are large enough to overlap after CreateProxy inflation.
+// Sizes chosen so the circles are large enough to overlap after CreateProxy
+// inflation by the fat-AABB extension.
 // ---------------------------------------------------------------------------
-static const int   N_FRUITS = 5;
-static const int   FRUIT_TIERS[5]  = { 4, 4, 3, 5, 3 };
-// Positions: two pairs overlapping (fruits 0&1, fruits 2&4), fruit 3 isolated.
-static const float FRUIT_X[5] = { 0.0f,  0.3f, -2.0f,  2.5f, -1.7f };
-static const float FRUIT_Y[5] = { 1.0f,  1.0f,  1.5f,  1.5f,  1.5f };
+static const int   N_CIRCLES = 5;
+static const int   CIRCLE_SIZE[5]  = { 4, 4, 3, 5, 3 };
+// Positions: two pairs overlapping (circles 0&1, circles 2&4), circle 3 isolated.
+static const float CIRCLE_X[5] = { 0.0f,  0.3f, -2.0f,  2.5f, -1.7f };
+static const float CIRCLE_Y[5] = { 1.0f,  1.0f,  1.5f,  1.5f,  1.5f };
 
 // Build a WorldShared with the test scene so gb_broadphase can read via BODY/EDGE.
 static WorldShared buildWorld(){
     WorldShared w;
     memset(&w, 0, sizeof(w));
     // Ground body (slot 0) = static, no proxy.
-    w.bodyCount = 1 + N_FRUITS;
+    w.bodyCount = 1 + N_CIRCLES;
     // Edges
     // floor: (-3.75,0)-(3.75,0)
     w.edgeAx[0]=-TEST_WALL_X; w.edgeAy[0]=0.f; w.edgeBx[0]=TEST_WALL_X;  w.edgeBy[0]=0.f;
@@ -292,12 +297,12 @@ static WorldShared buildWorld(){
     w.edgeAx[1]=-TEST_WALL_X; w.edgeAy[1]=0.f; w.edgeBx[1]=-TEST_WALL_X; w.edgeBy[1]=TEST_CONTAINER_H;
     // right wall: (3.75,0)-(3.75,9.5)
     w.edgeAx[2]=TEST_WALL_X;  w.edgeAy[2]=0.f; w.edgeBx[2]=TEST_WALL_X;  w.edgeBy[2]=TEST_CONTAINER_H;
-    // Fruit bodies (slots 1..N_FRUITS)
-    for(int i=0;i<N_FRUITS;++i){
+    // Dynamic circle bodies (slots 1..N_CIRCLES)
+    for(int i=0;i<N_CIRCLES;++i){
         int s=i+1;
-        w.sweepCx[s] = FRUIT_X[i];
-        w.sweepCy[s] = FRUIT_Y[i];
-        w.tier[s]    = FRUIT_TIERS[i];
+        w.sweepCx[s] = CIRCLE_X[i];
+        w.sweepCy[s] = CIRCLE_Y[i];
+        w.radius[s]  = circle_radius(CIRCLE_SIZE[i]);
         w.alive[s]   = 1;
         w.bodyType[s]= 2;  // GB_DYNAMIC_BODY
     }
@@ -319,19 +324,19 @@ int main(){
     // To match gbEdgeAABB (tight = tight AABB with polyRadius included),
     // we pass the tight poly-radius AABB to refCreateProxy.
     float EP = TEST_POLY_RADIUS;
-    int refEdge[3], refFruit[N_FRUITS];
+    int refEdge[3], refCircle[N_CIRCLES];
     // floor
     { RefAABB a={-TEST_WALL_X-EP,-EP,TEST_WALL_X+EP,EP}; refEdge[0]=refBpCreate(ref,a,0); }
     // left wall
     { RefAABB a={-TEST_WALL_X-EP,-EP,-TEST_WALL_X+EP,TEST_CONTAINER_H+EP}; refEdge[1]=refBpCreate(ref,a,0); }
     // right wall
     { RefAABB a={TEST_WALL_X-EP,-EP,TEST_WALL_X+EP,TEST_CONTAINER_H+EP}; refEdge[2]=refBpCreate(ref,a,0); }
-    // fruits
-    for(int i=0;i<N_FRUITS;++i){
-        float r=tier_radius_ref(FRUIT_TIERS[i]);
-        float cx=FRUIT_X[i], cy=FRUIT_Y[i];
+    // circles
+    for(int i=0;i<N_CIRCLES;++i){
+        float r=circle_radius(CIRCLE_SIZE[i]);
+        float cx=CIRCLE_X[i], cy=CIRCLE_Y[i];
         RefAABB a={cx-r,cy-r,cx+r,cy+r};
-        refFruit[i]=refBpCreate(ref,a,i+1);
+        refCircle[i]=refBpCreate(ref,a,i+1);
     }
     refBpUpdatePairs(ref);
 
@@ -342,16 +347,16 @@ int main(){
     GbBroadPhase gbp;
     gbBpInit(gbp);
 
-    int gbEdge[3], gbFruit[N_FRUITS];
+    int gbEdge[3], gbCircle[N_CIRCLES];
     for(int e=0;e<3;++e){
         GbAABB a = gbEdgeAABB(w, e, GB_POLYGON_RADIUS);
         gbEdge[e] = gbBpCreate(gbp, a, 0);
     }
-    for(int i=0;i<N_FRUITS;++i){
-        float r = tier_radius_ref(FRUIT_TIERS[i]);
+    for(int i=0;i<N_CIRCLES;++i){
+        float r = circle_radius(CIRCLE_SIZE[i]);
         int s = i+1;
         GbAABB a = gbCircleAABB(w, s, r);
-        gbFruit[i] = gbBpCreate(gbp, a, i+1);
+        gbCircle[i] = gbBpCreate(gbp, a, i+1);
     }
     gbBpUpdatePairs(gbp);
 
@@ -365,9 +370,9 @@ int main(){
         printf("  edge[%d]: ref=%d  gb=%d  %s\n",e,refEdge[e],gbEdge[e],match?"OK":"FAIL");
         if(!match) okA=false;
     }
-    for(int i=0;i<N_FRUITS;++i){
-        bool match = (refFruit[i] == gbFruit[i]);
-        printf("  fruit[%d]: ref=%d  gb=%d  %s\n",i,refFruit[i],gbFruit[i],match?"OK":"FAIL");
+    for(int i=0;i<N_CIRCLES;++i){
+        bool match = (refCircle[i] == gbCircle[i]);
+        printf("  circle[%d]: ref=%d  gb=%d  %s\n",i,refCircle[i],gbCircle[i],match?"OK":"FAIL");
         if(!match) okA=false;
     }
     if(!okA){

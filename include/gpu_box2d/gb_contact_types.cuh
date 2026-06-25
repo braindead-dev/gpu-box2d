@@ -8,28 +8,58 @@
 #pragma once
 #include "gb_pools.cuh"
 
-// ---- manifold (1-point; all our shapes are circle+edge, so pointCount<=1) ------
+// ---- manifold (up to GB_MAX_MANIFOLD_POINTS points) ----------------------------
+// Circles and circle-edge produce one point. Polygon contacts produce one or two.
+// pointCount drives every loop, so a 1-point manifold uses point 0 alone and the
+// 1-point path stays byte-identical. localPoint and pLocalPoint name point 0 for
+// back-compatibility with the single-point modules; pLocalPoint2 and the contact
+// ids carry the second clip point.
 struct GBManifold {
-    int type;          // GB_MANIFOLD_CIRCLES / GB_MANIFOLD_FACE_A
-    int pointCount;    // 0 or 1
-    V2  localNormal;   // for face-A
-    V2  localPoint;    // manifold.localPoint
+    int type;          // GB_MANIFOLD_CIRCLES / GB_MANIFOLD_FACE_A / GB_MANIFOLD_FACE_B
+    int pointCount;    // 0, 1, or 2
+    V2  localNormal;   // for face-A / face-B
+    V2  localPoint;    // manifold.localPoint (reference face center or circleA center)
     V2  pLocalPoint;   // points[0].localPoint
+    V2  pLocalPoint2;  // points[1].localPoint
+    unsigned int id0, id1;   // points[0].id.key, points[1].id.key (warm-start match)
 };
-struct GBWorldManifold { V2 normal; V2 point0; };   // world-space (1 point)
+// world-space contact points (up to GB_MAX_MANIFOLD_POINTS)
+struct GBWorldManifold { V2 normal; V2 point0; V2 point1; };
 
-// ---- fused velocity+position constraint (single point; localCenter==0) --------
+// ---- fused velocity+position constraint (up to two points; localCenter==0) -----
 struct GBVelConstraintPt {
     V2 rA, rB; float normalImpulse, tangentImpulse, normalMass, tangentMass, velocityBias;
 };
+// 2x2 block matrix (b2Mat22), column-major like Box2D: ex=(ex.x,ex.y), ey=(ey.x,ey.y).
+struct GBMat22 { V2 ex, ey; };
+
+// b2Mat22::GetInverse. The same float operations and ordering as Box2D 2.3.0.
+GB_HD inline GBMat22 gbMat22GetInverse(const GBMat22& m){
+    float a = m.ex.x, b = m.ey.x, c = m.ex.y, d = m.ey.y;
+    GBMat22 B;
+    float det = a*d - b*c;
+    if (det != 0.0f) det = 1.0f / det;
+    B.ex.x =  det*d;  B.ey.x = -det*b;
+    B.ex.y = -det*c;  B.ey.y =  det*a;
+    return B;
+}
+// b2Mul(b2Mat22, b2Vec2).
+GB_HD inline V2 gbMulMV(const GBMat22& A, V2 v){
+    return v2(A.ex.x*v.x + A.ey.x*v.y, A.ex.y*v.x + A.ey.y*v.y);
+}
 struct GBConstraint {
     int   indexA, indexB;            // island-local body indices
     float invMassA, invMassB, invIA, invIB;
     float friction, restitution;
     V2    normal;
-    GBVelConstraintPt p;             // single contact point (velocity)
+    GBVelConstraintPt p;             // contact point 0 (velocity)
+    GBVelConstraintPt p2;            // contact point 1 (velocity); used when pointCount==2
+    int   pointCount;                // 1 or 2 (set to 1 if the block solve is ill-conditioned)
+    GBMat22 K;                       // block velocity matrix (two-point solve)
+    GBMat22 normalMass22;            // inverse of K (two-point solve)
     int   contactIdx;                // global contact slot (StoreImpulses)
-    V2    localNormal, localPoint, pLocalPoint;   // position-solve
+    V2    localNormal, localPoint, pLocalPoint;   // position-solve, point 0
+    V2    pLocalPoint2;                            // position-solve, point 1
     int   type; float radiusA, radiusB;
 };
 
@@ -51,6 +81,8 @@ struct GBIslandData {
 //   gb_collision.cuh (narrow-phase):
 //     void gbCollideCircles(GBManifold&, float rA, Xf xfA, float rB, Xf xfB);
 //     void gbCollideEdgeAndCircle(GBManifold&, V2 A, V2 B, float edgeR, float circR, Xf xfA, Xf xfB);
+//     void gbCollidePolygons(GBManifold&, const GBPolygon& A, Xf xfA, const GBPolygon& B, Xf xfB);
+//     void gbCollidePolygonAndCircle(GBManifold&, const GBPolygon& A, Xf xfA, float circR, Xf xfB);
 //     void gbWorldManifoldInit(GBWorldManifold&, const GBManifold&, Xf xfA, float rA, Xf xfB, float rB);
 //     void gbContactUpdate(GBWorld& w, int ci);     // narrow-phase + touching + listener hook
 //
@@ -59,13 +91,18 @@ struct GBIslandData {
 //     gbCollidePhase. Either way it fills the world's contact pool and fires the
 //     listener hook in Box2D m_contactList order.
 //
-//   gb_contact_solver.cuh:
+//   gb_contact_solver.cuh (single-point and two-point block paths):
 //     void gbInitVelocityConstraints(GBWorld&, GBIslandData&);   // build GBConstraint per contact
 //     void gbWarmStart(GBIslandData&);
 //     void gbSolveVelocity(GBIslandData&);   // ONE velocity iteration (serial sweep, lane 0)
 //     void gbStoreImpulses(GBWorld&, GBIslandData&);
 //     bool gbSolvePosition(GBIslandData&);   // ONE position iteration; returns contactsOkay
 //                                            //   [SERIAL: minSeparation fold on lane 0]
+//
+//   gb_joint.cuh (revolute, point-to-point):
+//     void gbRevoluteInitVelocity(GBRevoluteJoint&, GBIslandData&);
+//     void gbRevoluteSolveVelocity(GBRevoluteJoint&, GBIslandData&);   // ONE velocity iteration
+//     bool gbRevoluteSolvePosition(GBRevoluteJoint&, GBIslandData&);   // ONE position iteration
 //
 //   gb_island.cuh:
 //     void gbWorldSolve(GBWorld& w);         // DFS island assembly + island Solve loop:

@@ -25,13 +25,23 @@
 #include "gpu_box2d/gb_island.cuh"          // gbWorldSolve (DFS + island Solve + folds)
 #include "gpu_box2d/gb_toi.cuh"             // GJK + b2TOI geometry primitives (gbTOI/gbContactProxy/...)
 
-// ---- contact materials (Box2D mixing, reference-exact). Fruit and wall defaults.
-// (Per-fixture material fields are a later refinement; these values match the
-//  validated CPU reference, so the assembled core stays bit-faithful.)
-#define GB_FRUIT_FRICTION    0.265f
-#define GB_FRUIT_RESTITUTION 0.02f
-#define GB_WALL_FRICTION     0.2f
-#define GB_WALL_RESTITUTION  0.0f
+// ---- contact materials (Box2D mixing, reference-exact). Default friction and
+// restitution for dynamic bodies and the static ground. Per-fixture material
+// fields are a later refinement; an application overrides these defines to set
+// its own materials. The mixing rules (b2MixFriction / b2MixRestitution) are
+// exact, so the assembled core stays bit-faithful.
+#ifndef GB_BODY_FRICTION
+#define GB_BODY_FRICTION     0.265f
+#endif
+#ifndef GB_BODY_RESTITUTION
+#define GB_BODY_RESTITUTION  0.02f
+#endif
+#ifndef GB_GROUND_FRICTION
+#define GB_GROUND_FRICTION   0.2f
+#endif
+#ifndef GB_GROUND_RESTITUTION
+#define GB_GROUND_RESTITUTION 0.0f
+#endif
 
 // ---- fat-AABB helpers (brute-force broad-phase, fat-AABB-equivalent to the tree) --
 GB_HD inline void gbCircleAABB(GBWorld& w, int i, float& lo_x, float& lo_y, float& hi_x, float& hi_y){
@@ -58,12 +68,12 @@ GB_HD inline int gbFindContact(GBWorld& w, int bodyA, int bodyB, int edge){
 // ============================================================================
 // gbCollidePhase. b2ContactManager Collide + FindNewContacts (brute-force fat-AABB),
 // byte-identical to the validated collide phase: create new overlapping pairs
-// (fruit-fruit in a<b order, then fruit-wall), destroy separated, then run
+// (body-body in a<b order, then body-ground-edge), destroy separated, then run
 // gbContactUpdate on each surviving contact.
 // ============================================================================
 GB_HD inline void gbCollidePhase(GBWorld& w){
     int bc = SCAL(w,bodyCount);
-    // 1) new contacts - fruit-fruit
+    // 1) new contacts - body-body
     for (int a=1;a<bc;++a){
         if (!BODY(w,alive,a)) continue;
         float al,at,ar,ab; gbCircleAABB(w,a,al,at,ar,ab);
@@ -74,13 +84,13 @@ GB_HD inline void gbCollidePhase(GBWorld& w){
             if (gbFindContact(w,a,b,-1)>=0) continue;
             int ci=SCAL(w,contactCount)++;
             CONT(w,cBodyA,ci)=a; CONT(w,cBodyB,ci)=b; CONT(w,cEdge,ci)=-1; CONT(w,cTouching,ci)=0;
-            CONT(w,cFriction,ci)=b2MixFriction(GB_FRUIT_FRICTION,GB_FRUIT_FRICTION);
-            CONT(w,cRestitution,ci)=b2MixRestitution(GB_FRUIT_RESTITUTION,GB_FRUIT_RESTITUTION);
+            CONT(w,cFriction,ci)=b2MixFriction(GB_BODY_FRICTION,GB_BODY_FRICTION);
+            CONT(w,cRestitution,ci)=b2MixRestitution(GB_BODY_RESTITUTION,GB_BODY_RESTITUTION);
             CONT(w,cNormalImpulse,ci)=0.0f; CONT(w,cTangentImpulse,ci)=0.0f;
             CONT(w,cEnabled,ci)=1; CONT(w,cToi,ci)=1.0f; CONT(w,cToiCount,ci)=0; CONT(w,cToiFlag,ci)=0;
         }
     }
-    // fruit-wall
+    // body-ground-edge
     for (int e=0;e<GB_N_EDGES;++e){
         float el,et,er,eb; gbEdgeAABB(w,e,el,et,er,eb);
         for (int b=1;b<bc;++b){
@@ -90,8 +100,8 @@ GB_HD inline void gbCollidePhase(GBWorld& w){
             if (gbFindContact(w,GB_GROUND,b,e)>=0) continue;
             int ci=SCAL(w,contactCount)++;
             CONT(w,cBodyA,ci)=GB_GROUND; CONT(w,cBodyB,ci)=b; CONT(w,cEdge,ci)=e; CONT(w,cTouching,ci)=0;
-            CONT(w,cFriction,ci)=b2MixFriction(GB_WALL_FRICTION,GB_FRUIT_FRICTION);
-            CONT(w,cRestitution,ci)=b2MixRestitution(GB_WALL_RESTITUTION,GB_FRUIT_RESTITUTION);
+            CONT(w,cFriction,ci)=b2MixFriction(GB_GROUND_FRICTION,GB_BODY_FRICTION);
+            CONT(w,cRestitution,ci)=b2MixRestitution(GB_GROUND_RESTITUTION,GB_BODY_RESTITUTION);
             CONT(w,cNormalImpulse,ci)=0.0f; CONT(w,cTangentImpulse,ci)=0.0f;
             CONT(w,cEnabled,ci)=1; CONT(w,cToi,ci)=1.0f; CONT(w,cToiCount,ci)=0; CONT(w,cToiFlag,ci)=0;
         }

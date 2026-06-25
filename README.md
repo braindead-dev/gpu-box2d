@@ -100,18 +100,20 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Contact solver and island (sequential-impulse + DFS assembly) | validated, 0 ULP |
 | CCD / TOI (GJK distance + `b2TimeOfImpact` + SolveTOI) | validated, 0 ULP on the circle-edge sweep |
 | Revolute joint (`b2RevoluteJoint`, point-to-point) | validated, 0 ULP on a pendulum over hundreds of substeps |
+| Polygons and the joint wired into the assembled `gb_world_step` | live, box-on-ground, box-on-box, circle-on-box, and a pinned pendulum settle through the step |
 | Thread-per-world SoA execution (production path) | validated, about 23K env-steps/s on an A10 |
 | Block-per-world shared-memory execution | built and measured, slower (see performance.md) |
 | Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
 
 ## Roadmap
 
-The shape set now spans circles, edges, and convex polygons, the contact solver covers the one-point and two-point block paths, and the revolute joint is in. The forward direction widens the constraint set and the launcher while holding the bit-identical guarantee.
+The shape set now spans circles, edges, and convex polygons, the contact solver covers the one-point and two-point block paths, and the revolute joint is in. The polygon narrow-phase and the joint solve are wired into the assembled `gb_world_step` behind the `GB_ENABLE_POLYGONS` and `GB_ENABLE_JOINTS` build flags, so a step over a mixed scene dispatches circle, edge, and polygon contacts and runs the joint solve in island order. The forward direction widens the constraint set and the launcher while holding the bit-identical guarantee.
 
 1. A general batched launcher and Python bindings, so the engine drops into a training loop as a library.
 2. The revolute motor and angle-limit rows (the 3x3 path on top of the point-to-point joint that is already in), then the remaining joint types: prismatic, distance, weld, and pulley, each on the same accessor contract with a 0-ULP micro-test.
-3. The chain and the general edge shape (vertex0/vertex3 connectivity), so swept polygon soup works as a static collider.
-4. Wiring the polygon narrow-phase and the joint solve into the assembled `gb_step` so a batched run drives mixed shape and joint scenes, with the shape tag dispatching circle, edge, and polygon contacts.
+3. The dedicated `b2CollideEdgeAndPolygon` narrow-phase. The assembled step currently collides a ground edge against a polygon by treating the edge as a two-segment polygon; a direct port of `b2CollideEdgeAndPolygon` makes the edge-polygon manifold bit-exact like the rest.
+4. The chain and the general edge shape (vertex0/vertex3 connectivity), so swept polygon soup works as a static collider.
+5. Per-point warm-start id matching for polygon contacts, so a contact whose clip features change between substeps carries impulse by matching feature id per surviving point.
 
 Two earlier roadmap items are now closed findings. Making dense connected islands bit-identical is unreachable: the residual is irreducible float32 rounding in large islands, reproduced by both the faithful broad-phase and the colored solver, so it is documented as a known property in [docs/fidelity.md](docs/fidelity.md). Block-parallelizing the phases was built and measured slower than thread-per-world and is documented as a rejected approach in [docs/performance.md](docs/performance.md).
 

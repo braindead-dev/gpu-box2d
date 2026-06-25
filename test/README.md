@@ -22,6 +22,12 @@ they compare against.
 - **`gb_joint_test.cu`** swings a two-body pendulum on a point-to-point revolute joint
   over hundreds of substeps and compares against an embedded Box2D 2.3.0
   `b2RevoluteJoint` reference. Validated, 0 ULP.
+- **`gb_wired_step_test.cu`** drives the assembled `gb_world_step` with polygons and
+  the joint enabled (`-DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS`) and checks that a box
+  settles on the floor through a two-point manifold, a box stacks on a box, a circle
+  rests on a box, and a body pinned by a revolute joint swings while holding its
+  anchor distance. This proves the dispatch is live in the step; the per-module tests
+  above establish the 0-ULP fidelity.
 
 These build and run with the gate or with CMake / CTest.
 

@@ -1,10 +1,29 @@
 # Extending toward full Box2D
 
 The core covers circles, edges, and convex polygons, the single-point and two-point
-contact solvers, continuous collision, and the revolute joint. This document records
-how the polygon and joint layers were added on the accessor contract, and gives the
-concrete path for the next shape, solver row, and joint type. Every step keeps the
-bit-identical guarantee.
+contact solvers, continuous collision, and the revolute joint. The polygon and joint
+paths are wired into the assembled `gb_world_step` behind two build flags. This
+document records how the polygon and joint layers were added on the accessor contract,
+and gives the concrete path for the next shape, solver row, and joint type. Every step
+keeps the bit-identical guarantee.
+
+## Build flags for the broader feature set
+
+The circle-and-edge core is the default build, and it is byte-for-byte the original
+engine. The polygon and joint paths are opt-in so a circle-only consumer pays nothing
+for them in struct size or code:
+
+```
+-DGB_ENABLE_POLYGONS   per-body shape tag, polygon storage, and the polygon dispatch
+                       in the narrow-phase, the broad-phase AABB, and the solver radius
+-DGB_ENABLE_JOINTS     the per-world revolute joint pool, the joint edge walk in island
+                       assembly, and the joint solve interleave
+```
+
+With both flags off, the assembled step compiles and runs exactly as the circle-and-edge
+engine, and the per-substep floats are unchanged. With a flag on, the matching storage
+appears in `WorldShared` and its SoA mirror behind the accessor macros, and the step
+dispatches the new path when a body carries that shape or the world holds a joint.
 
 ## The two rules that never bend
 
@@ -83,19 +102,47 @@ and the position solve.
   and compares the bob velocity, angular velocity, position, angle, and the
   warm-start impulse against the Box2D 2.3.0 reference at 0 ULP.
 
+## Wired into the assembled step (shipped)
+
+With `GB_ENABLE_POLYGONS` and `GB_ENABLE_JOINTS` the assembled `gb_world_step` drives
+the new paths end to end.
+
+- **Shape dispatch.** `gbContactUpdate` reads each fixture's shape tag through
+  `gbBodyShape` and calls `gbCollideCircles`, `gbCollidePolygonAndCircle`, or
+  `gbCollidePolygons` accordingly, writing the manifold point count and the second
+  clip point into the contact cache. A ground edge against a polygon body is collided
+  by treating the edge as a two-segment polygon (the dedicated
+  `b2CollideEdgeAndPolygon` is a roadmap refinement).
+- **Broad-phase and solver radius.** The brute-force broad-phase AABB uses the rotated
+  polygon vertex bound for a polygon body, and the island constraint load uses the
+  polygon skin radius. Both branch on the shape tag and leave the circle path
+  untouched.
+- **Block solver.** A cached two-point manifold sets the contact's point count to two,
+  which routes the contact through the two-point block path in `gbSolveVelocity` and
+  the two-point position solve.
+- **Joints.** The DFS in `gb_island.cuh` walks joint edges after contact edges, so
+  joint-connected bodies share an island, and the island solver runs the revolute
+  phases in Box2D's interleave: init contacts, warm-start contacts, init joints; each
+  velocity iteration solves joints then contacts; each position iteration solves
+  contacts then joints, exiting when both are within tolerance.
+- **Test.** `gb_wired_step_test.cu` builds a `WorldShared` through the accessor
+  contract and steps it: a box settles on the floor through a two-point manifold, a
+  box stacks on a box, a circle rests on a box, and a body pinned by a revolute joint
+  swings while holding its anchor distance. This proves the dispatch is live; the
+  per-module 0-ULP tests establish the underlying fidelity.
+
 ## Adding the next module
 
 The same path extends the engine further.
 
+- **Edge-polygon narrow-phase.** Port `b2CollideEdgeAndPolygon` so the ground edge
+  against a polygon body is bit-exact, replacing the two-segment-polygon stand-in the
+  wired step uses now.
 - **More joint types.** The revolute motor and angle-limit rows add the 3x3 path
   (`b2Mat33::Solve22` / `Solve33`) on top of the point-to-point joint. Prismatic,
   distance, weld, and pulley each have their own `InitVelocityConstraints`,
-  `SolveVelocityConstraints`, and `SolvePositionConstraints`. Box2D solves joints
-  before contacts within each velocity and position iteration, in joint-list order;
-  reproduce that interleave in the per-island driver.
-- **Island assembly with joints.** Extend the DFS in `gb_island.cuh` to walk joint
-  edges as well as contact edges, so joint-connected bodies land in the same island
-  in Box2D's graph-traversal order.
+  `SolveVelocityConstraints`, and `SolvePositionConstraints` and slot into the same
+  island interleave.
 - **More shapes.** The chain shape and the general edge (with vertex0/vertex3
   connectivity) follow the polygon pattern: shape data behind new accessors, a
   narrow-phase ported in order, and a tight AABB helper.

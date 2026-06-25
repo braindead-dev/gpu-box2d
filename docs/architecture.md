@@ -137,6 +137,15 @@ CCD path is a required part of the engine. Box2D's TOI fires several times per s
 dynamic-static contacts and moves positions enough to fork trajectories, so omitting it
 diverges.
 
+The default build steps circles and edges. Two opt-in flags widen the same pipeline:
+`GB_ENABLE_POLYGONS` adds a per-body shape tag and polygon storage, so the narrow-phase
+dispatches the polygon manifold and the contact solver runs the two-point block path,
+and `GB_ENABLE_JOINTS` adds a per-world joint pool, so island assembly walks joint edges
+and the island solver interleaves the revolute joint solve with the contacts. With both
+flags off the pipeline and the per-substep floats are unchanged. The storage for both
+sits behind the accessor macros, so the broader feature set is a build-time choice that
+leaves every circle-and-edge call site untouched.
+
 ## Module map
 
 | Header | Role |

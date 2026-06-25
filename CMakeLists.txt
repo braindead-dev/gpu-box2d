@@ -86,6 +86,16 @@ if(GPU_BOX2D_BUILD_TESTS)
   set_tests_properties(gb_joint PROPERTIES
     PASS_REGULAR_EXPRESSION "PASS gb_joint")
 
+  # Wired-step integration: polygons and the revolute joint driven through the
+  # assembled gb_world_step. Built with the polygon and joint features enabled.
+  add_executable(gb_wired_step_test test/gb_wired_step_test.cu)
+  target_link_libraries(gb_wired_step_test PRIVATE gpu_box2d)
+  target_include_directories(gb_wired_step_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+  target_compile_definitions(gb_wired_step_test PRIVATE GB_ENABLE_POLYGONS GB_ENABLE_JOINTS)
+  add_test(NAME gb_wired_step COMMAND gb_wired_step_test)
+  set_tests_properties(gb_wired_step PROPERTIES
+    PASS_REGULAR_EXPRESSION "PASS gb_wired_step")
+
   if(GPU_BOX2D_BUILD_REF_TESTS AND GPU_BOX2D_REF_INCLUDE)
     add_executable(gb_toi_test test/gb_toi_test.cu)
     target_link_libraries(gb_toi_test PRIVATE gpu_box2d)

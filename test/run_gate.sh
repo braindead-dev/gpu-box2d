@@ -71,6 +71,18 @@ else
   bad "gb_joint failed to build"
 fi
 
+# Wired-step integration: polygons and the revolute joint driven through the
+# assembled gb_world_step (built with the polygon and joint features on).
+if nvcc $FLAGS -DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS -I"$INC" -I"$HERE" "$HERE/gb_wired_step_test.cu" -o "$HERE/gb_wired_step_test" 2>/dev/null; then
+  if "$HERE/gb_wired_step_test" 2>&1 | grep -q "PASS gb_wired_step"; then
+    ok "gb_wired_step (polygons + joint live in gb_world_step)"
+  else
+    bad "gb_wired_step diverged"
+  fi
+else
+  bad "gb_wired_step failed to build"
+fi
+
 # The CCD (gb_toi) and solver/island (gb_contact_solver + gb_island) micro-tests
 # compile against the Box2D 2.3.0 reference translation unit. That reference is
 # wired in once the narrow-phase and solver modules are assembled. Until then,

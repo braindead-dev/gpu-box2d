@@ -48,6 +48,15 @@ GB_HD inline V2 gbMulMV(const GBMat22& A, V2 v){
     return v2(A.ex.x*v.x + A.ey.x*v.y, A.ex.y*v.x + A.ey.y*v.y);
 }
 
+// b2Mat22::Solve. Solves K * x = b for x without forming the inverse. Same float
+// operations and ordering as Box2D 2.3.0. Shared by the joints.
+GB_HD inline V2 gbMat22SolveV(const GBMat22& K, V2 b){
+    float a11 = K.ex.x, a12 = K.ey.x, a21 = K.ex.y, a22 = K.ey.y;
+    float det = a11*a22 - a12*a21;
+    if (det != 0.0f) det = 1.0f / det;
+    return v2(det*(a22*b.x - a12*b.y), det*(a11*b.y - a21*b.x));
+}
+
 // 3x3 matrix (b2Mat33), column-major (ex, ey, ez are columns). Used by the 3x3 joint
 // solves (weld, and the revolute motor/limit path). The ops below are line-faithful to
 // Box2D 2.3.0 b2Mat33.

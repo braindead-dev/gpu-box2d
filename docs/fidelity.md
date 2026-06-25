@@ -80,6 +80,7 @@ verifiable while it is built, rather than validating only at the end.
 | joint (revolute) | b2RevoluteJoint init / velocity / position (point-to-point) | yes |
 | joint (distance) | b2DistanceJoint init / velocity / position (rigid + soft) | yes |
 | joint (weld) | b2WeldJoint init / velocity / position (3x3, rigid + soft) | yes |
+| joint (prismatic) | b2PrismaticJoint init / velocity / position (free + limit + motor) | yes |
 
 ## What is verified
 
@@ -113,6 +114,10 @@ The following are green at 0 ULP against the CPU Box2D reference:
   over hundreds of substeps and reproduces the bar velocity, angular velocity,
   position, angle, and all three warm-start impulse components at 0 ULP, covering the
   rigid 3x3 symmetric-inverse path and the soft 2x2-plus-angular path.
+- **Prismatic joint.** `test/gb_prismatic_joint_test.cu` slides a body on an axis over
+  hundreds of substeps and reproduces the body velocity, angular velocity, position,
+  angle, the three impulse components, and the motor impulse at 0 ULP, covering the
+  free slider (2x2 block), the active translation limit (3x3 path), and the motor row.
 - **Broad-phase.** `test/gb_broadphase_test.cu` produces the exact proxyId sequence and
   the exact AddPair order as Box2D for a fixed scene.
 - **Contact solver and island.** `test/gb_island_test.cu` reproduces the velocity and
@@ -164,7 +169,7 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports eight green micro-tests and zero red:
+flags, `test/run_gate.sh` reports nine green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
@@ -174,8 +179,9 @@ GREEN  gb_block_solver (two-point LCP block solve, 0 ULP)
 GREEN  gb_joint (revolute pendulum, 0 ULP)
 GREEN  gb_distance_joint (rigid rod + soft spring, 0 ULP)
 GREEN  gb_weld_joint (rigid + soft weld, 3x3 path, 0 ULP)
+GREEN  gb_prismatic_joint (free + limit + motor, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
-GATE SUMMARY: 8 green, 0 red
+GATE SUMMARY: 9 green, 0 red
 ALL GREEN.
 ```
 

@@ -50,6 +50,7 @@ build_run gb_block_solver        "PASS gb_block_solver"
 build_run gb_joint               "PASS gb_joint"
 build_run gb_distance_joint      "PASS gb_distance_joint"
 build_run gb_weld_joint          "PASS gb_weld_joint"
+build_run gb_prismatic_joint     "PASS gb_prismatic_joint"
 build_run gb_wired_step          "PASS gb_wired_step" "-DGB_ENABLE_POLYGONS -DGB_ENABLE_JOINTS"
 
 echo "================================================================"

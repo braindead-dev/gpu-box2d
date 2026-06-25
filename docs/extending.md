@@ -124,6 +124,24 @@ The 3x3 machinery the weld joint needs lives in `gb_contact_types.cuh`: `GBMat33
 `Solve33`, `Solve22`, `GetInverse22`, and `GetSymInverse33`, line-faithful to
 `b2Mat33`. The revolute motor and angle-limit rows reuse the same matrix.
 
+## The prismatic joint (shipped)
+
+`gb_prismatic_joint.cuh` ports `b2PrismaticJoint`, the slider. It constrains the two
+perpendicular-to-axis degrees of freedom and the relative angle and leaves translation
+along the axis free, with an optional limit and motor. It carries the most paths of the
+joints so far:
+
+- **The 2x2 block** holds the perpendicular and angular rows, always active.
+- **The motor row** drives the body along the axis, clamped to the maximum motor force.
+- **The limit row** activates the axis constraint at the lower or upper stop, which
+  turns the solve into the 3x3 path that solves the limit and the perpendicular block
+  together, with the limit impulse clamped by sign.
+
+`gb_prismatic_joint_test.cu` runs a free slider, a slider that falls to its lower limit,
+and a motorized slider over hundreds of substeps, and reproduces the body velocity,
+angular velocity, position, angle, the three impulse components, and the motor impulse
+at 0 ULP, so all three paths are covered.
+
 ## Wired into the assembled step (shipped)
 
 With `GB_ENABLE_POLYGONS` and `GB_ENABLE_JOINTS` the assembled `gb_world_step` drives
@@ -181,9 +199,8 @@ The same path extends the engine further.
 
 - **More joint types.** The revolute motor and angle-limit rows add the 3x3 path
   (`b2Mat33::Solve22` / `Solve33`) on top of the point-to-point joint; the `GBMat33`
-  ops the weld joint already uses carry it. The prismatic joint (translation along an
-  axis with an optional motor and limit) and the pulley and gear joints each have their
-  own `InitVelocityConstraints`, `SolveVelocityConstraints`, and
+  ops the weld and prismatic joints already use carry it. The pulley and gear joints
+  each have their own `InitVelocityConstraints`, `SolveVelocityConstraints`, and
   `SolvePositionConstraints` and slot into the same island interleave.
 - **More shapes.** The chain shape and the general edge (with vertex0/vertex3
   connectivity) follow the polygon pattern: shape data behind new accessors, a

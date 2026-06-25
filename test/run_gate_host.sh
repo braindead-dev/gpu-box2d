@@ -19,7 +19,14 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 INC="$ROOT/include"
 CXX="${CXX:-c++}"
-FLAGS="-O2 -x c++"
+FLAGS="-O2 -x c++ -ffp-contract=off"
+# On x86, -mfpmath=sse completes the IEEE single-precision environment that matches the
+# CPU Box2D reference. arm64 rounds to IEEE single precision without that switch. Each
+# micro-test embeds its reference in the same translation unit, so the 0-ULP comparison
+# holds on either architecture; the flags align the host environment with the gate.
+case "$(uname -m)" in
+  x86_64|amd64|i386|i686) FLAGS="$FLAGS -mfpmath=sse" ;;
+esac
 
 PASS=0
 FAIL=0

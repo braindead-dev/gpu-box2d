@@ -1,0 +1,54 @@
+# CI: run the host-mode 0-ULP micro-test gate and the Python binding test on every push
+# and pull request. The gate builds each self-contained micro-test with a host C++
+# compiler and asserts its 0-ULP pass line, so it runs with no GPU. On x86 the runner
+# adds the IEEE single-precision flags that match the CPU Box2D reference; the gate
+# script sets them per architecture.
+#
+# The definitive x86/CUDA gate (test/run_gate.sh with nvcc and the frozen flags) runs in
+# a GPU window and is not part of this host CI.
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  host-gate:
+    name: host-mode 0-ULP gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compiler version
+        run: clang++ --version
+
+      - name: Run the host-mode micro-test gate
+        run: CXX=clang++ ./test/run_gate_host.sh
+
+  python-binding:
+    name: python binding
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pip pybind11 numpy
+
+      - name: Build and install the binding
+        run: python -m pip install ./bindings
+
+      - name: Run the Python binding test
+        run: python bindings/test_batch.py
+
+      - name: Run the box-stack example
+        run: python examples/box_stack/box_stack.py
+
+      - name: Run the ragdoll example
+        run: python examples/ragdoll/ragdoll.py

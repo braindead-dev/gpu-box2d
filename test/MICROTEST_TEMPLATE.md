@@ -23,6 +23,7 @@ green micro-test. This is how the engine stays verifiable while it is built.
 | collision | b2CollideCircles / b2CollideEdgeAndCircle / worldManifold | yes |
 | polygon | b2PolygonShape mass / b2CollidePolygons / b2CollidePolygonAndCircle | yes |
 | edge-polygon | b2CollideEdgeAndPolygon (b2EPCollider) | yes |
+| chain | b2ChainShape CreateChain / CreateLoop / GetChildEdge | yes |
 | broad-phase | b2DynamicTree proxyId sequence + AddPair order | yes, integer-exact |
 | contact solver | b2ContactSolver single-point and two-point velocity + position iters | yes, serial sweep |
 | island | b2Island::Solve integrate / sleep + DFS order | yes |

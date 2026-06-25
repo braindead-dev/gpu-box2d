@@ -93,7 +93,7 @@ CXX=clang++ ./test/run_gate_host.sh
 
 ## Status
 
-The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, ten micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
+The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute joint. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, eleven micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
 
 | Component | Status |
 |---|---|
@@ -102,6 +102,7 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Polygon shape (`b2PolygonShape`: box, hull, mass, AABB) | validated, 0 ULP |
 | Polygon narrow-phase (`b2CollidePolygons`, `b2CollidePolygonAndCircle`) | validated, 0 ULP on the one- and two-point manifolds |
 | Edge-polygon narrow-phase (`b2CollideEdgeAndPolygon`, `b2EPCollider`) | validated, 0 ULP on the face-A and face-B manifolds |
+| Chain shape (`b2ChainShape`, child-edge generation) | validated, 0 ULP on the open-chain and loop child edges |
 | Two-point block solver (the LCP block path for polygon contacts) | validated, 0 ULP through the full velocity and position spine |
 | Broad-phase (`b2DynamicTree` + `b2BroadPhase`) | validated, exact proxyId and AddPair order |
 | Contact solver and island (sequential-impulse + DFS assembly) | validated, 0 ULP |
@@ -114,7 +115,7 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Thread-per-world SoA execution (production path) | validated, about 23K env-steps/s on an A10 |
 | Block-per-world shared-memory execution | built and measured, slower (see performance.md) |
 | Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
-| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 10 micro-tests, 0 red |
+| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 11 micro-tests, 0 red |
 
 ## Roadmap
 
@@ -122,7 +123,7 @@ The shape set now spans circles, edges, and convex polygons, with circle, edge-c
 
 1. A general batched launcher and Python bindings, so the engine drops into a training loop as a library.
 2. The remaining joint paths: the revolute motor and angle-limit rows (the 3x3 path on top of the point-to-point joint that is already in, reusing the `GBMat33` ops the weld and prismatic joints carry), and the pulley and gear joints, each on the same accessor contract with a 0-ULP micro-test.
-3. The chain shape (`b2ChainShape`) and the general edge with vertex0/vertex3 connectivity, so swept polygon soup works as a static collider. The edge-polygon narrow-phase already carries the adjacency path, so the chain reuses it directly.
+3. Wiring the chain shape (`b2ChainShape`) into the assembled step as a per-world static collider. The chain's child-edge generation is validated 0-ULP and feeds the adjacency-aware edge collider; the remaining work is per-world chain storage behind the accessors and a child-edge loop in the narrow-phase.
 4. Per-point warm-start id matching for polygon contacts, so a contact whose clip features change between substeps carries impulse by matching feature id per surviving point.
 
 Two earlier roadmap items are now closed findings. Making dense connected islands bit-identical is unreachable: the residual is irreducible float32 rounding in large islands, reproduced by both the faithful broad-phase and the colored solver, so it is documented as a known property in [docs/fidelity.md](docs/fidelity.md). Block-parallelizing the phases was built and measured slower than thread-per-world and is documented as a rejected approach in [docs/performance.md](docs/performance.md).

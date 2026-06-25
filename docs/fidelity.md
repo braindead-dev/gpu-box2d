@@ -72,6 +72,7 @@ verifiable while it is built, rather than validating only at the end.
 | collision | b2CollideCircles / b2CollideEdgeAndCircle / worldManifold | yes |
 | polygon | b2PolygonShape mass / b2CollidePolygons / b2CollidePolygonAndCircle | yes |
 | edge-polygon | b2CollideEdgeAndPolygon (b2EPCollider) | yes |
+| chain | b2ChainShape CreateChain / CreateLoop / GetChildEdge | yes |
 | broad-phase | b2DynamicTree proxyId sequence + AddPair order | yes, integer-exact |
 | contact solver | b2ContactSolver velocity + position iters (1-point and 2-point block) | yes, serial sweep |
 | block solver | b2ContactSolver two-point LCP cascade + 2x2 block | yes |
@@ -99,6 +100,10 @@ The following are green at 0 ULP against the CPU Box2D reference:
   box on a sloped edge, a box overhanging a short edge (the polygon-face path), and a
   separated box, covering the face-A and face-B reference cases, the point count, the
   local normal and point, both clip points, and both contact ids.
+- **Chain shape.** `test/gb_chain_shape_test.cu` reproduces `b2ChainShape`'s child-edge
+  generation at 0 ULP for an open chain and a closed loop, matching every child edge's
+  segment vertices, adjacent vertices, and adjacency flags, and confirms a chain child
+  edge drives the edge-polygon collider to a finite manifold.
 - **Two-point block solver.** `test/gb_block_solver_test.cu` drives the full velocity
   and position spine on a box resting on the ground and reproduces every body
   kinematic and both warm-start impulses at 0 ULP, exercising the 2x2 block matrix,
@@ -172,12 +177,13 @@ ctest --test-dir build --output-on-failure
 ## Gate status
 
 The x86/CUDA gate passes all green. On an A10 (sm_86) with CUDA 12.8 and the frozen
-flags, `test/run_gate.sh` reports ten green micro-tests and zero red:
+flags, `test/run_gate.sh` reports eleven green micro-tests and zero red:
 
 ```
 GREEN  gb_broadphase (proxyId + AddPair order, 0 ULP)
 GREEN  gb_polygon (mass + polygon-polygon + polygon-circle, 0 ULP)
 GREEN  gb_collide_edge_polygon (b2CollideEdgeAndPolygon, face-A + face-B, 0 ULP)
+GREEN  gb_chain_shape (b2ChainShape child edges, 0 ULP)
 GREEN  gb_block_solver (two-point LCP block solve, 0 ULP)
 GREEN  gb_joint (revolute pendulum, 0 ULP)
 GREEN  gb_revolute_joint (point-to-point + motor + limit, 0 ULP)
@@ -185,7 +191,7 @@ GREEN  gb_distance_joint (rigid rod + soft spring, 0 ULP)
 GREEN  gb_weld_joint (rigid + soft weld, 3x3 path, 0 ULP)
 GREEN  gb_prismatic_joint (free + limit + motor, 0 ULP)
 GREEN  gb_wired_step (polygons + joint live in gb_world_step)
-GATE SUMMARY: 10 green, 0 red
+GATE SUMMARY: 11 green, 0 red
 ALL GREEN.
 ```
 

@@ -206,6 +206,19 @@ manifold. It replaces the two-segment-polygon stand-in the wired step used befor
   separated box (no contact), and reproduces the manifold type, point count, local
   normal, local point, both clip points, and both contact ids at 0 ULP.
 
+## The chain shape (shipped)
+
+`gb_chain_shape.cuh` ports `b2ChainShape`, the standard static world boundary: a ground
+contour, a level outline, or a closed loop. A chain is a sequence of connected edge
+segments, and it collides through its child edges. `gbChainGetChildEdge` builds the
+child edge at an index and wires its vertex0 / vertex3 from the neighbors (or the ghost
+vertices at the ends), which is exactly the adjacency the edge-polygon and edge-circle
+colliders already consume, so the chain is a thin generator over the validated edge
+collider. `gbChainCreateChain` builds an open chain and `gbChainCreateLoop` a closed
+loop. `gb_chain_shape_test.cu` reproduces the child-edge generation at 0 ULP against the
+Box2D 2.3.0 reference for an open chain and a loop, and confirms a child edge drives the
+edge-polygon collider end to end.
+
 ## Adding the next module
 
 The same path extends the engine further.
@@ -214,9 +227,10 @@ The same path extends the engine further.
   `InitVelocityConstraints`, `SolveVelocityConstraints`, and
   `SolvePositionConstraints` and slot into the same island interleave, reusing the
   `GBMat22` and `GBMat33` ops the existing joints carry.
-- **More shapes.** The chain shape and the general edge (with vertex0/vertex3
-  connectivity) follow the polygon pattern: shape data behind new accessors, a
-  narrow-phase ported in order, and a tight AABB helper.
+- **Per-world chain storage.** The chain shape and its child-edge generation are
+  validated standalone. Wiring a chain into the assembled step as a per-world static
+  collider adds chain vertex storage behind the accessors and a child-edge loop in the
+  narrow-phase, following the polygon storage pattern.
 
 ## Growing the bounds
 

@@ -109,7 +109,7 @@ CXX=clang++ ./test/run_gate_host.sh
 
 ## Status
 
-The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute, distance, weld, prismatic, pulley, and gear joints. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The x86/CUDA gate (`test/run_gate.sh`) passes all green, sixteen micro-tests with zero red, on an A10 (sm_86) with CUDA 12.8. The same tests build and run host-mode on a CPU for development. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-mode path.
+The engine is complete and validated for circles, edges, and convex polygons, with single-point and two-point contact solving, continuous collision, and the revolute, distance, weld, prismatic, pulley, and gear joints. Single-world physics is bit-identical to Box2D 2.3.0, and the full pipeline (broad-phase, narrow-phase, contact solver, island, CCD, and both memory backends) is in place behind the 0-ULP gate. The gate holds sixteen self-contained micro-tests, each comparing a module against an embedded Box2D 2.3.0 reference at 0 ULP. Every test runs host-mode on a CPU (`test/run_gate_host.sh`), and the x86/CUDA gate with nvcc and the frozen flags is the definitive bit-for-bit environment, validated all green on an A10 (sm_86) with CUDA 12.8. See [docs/fidelity.md](docs/fidelity.md) for the gate output and the host-versus-GPU validation path.
 
 | Component | Status |
 |---|---|
@@ -135,7 +135,7 @@ The engine is complete and validated for circles, edges, and convex polygons, wi
 | Graph-colored parallel solver | built and measured, distribution-faithful speed path (see performance.md) |
 | Python binding (batched driver + pybind11, numpy obs/state API) | validated host-mode, driver 0 ULP vs the standalone step |
 | CUDA batch path (SoA upload, thread-per-world step, download) | device path written; the upload/download transpose round-trips byte-exact |
-| x86/CUDA 0-ULP gate (`test/run_gate.sh`) | passes all green, 16 micro-tests, 0 red |
+| 0-ULP gate (16 micro-tests) | all green host-mode (`run_gate_host.sh`); x86/CUDA gate all green on an A10 |
 
 ## Roadmap
 

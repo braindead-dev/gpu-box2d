@@ -222,6 +222,13 @@ Each new module joins the gate with its own green line, so the count grows as th
 engine grows. The broad-phase test is integer-exact (proxyId sequence and AddPair
 order); the rest assert 0 ULP against an embedded Box2D 2.3.0 reference.
 
+Every test in the gate is self-contained: its subject and its Box2D 2.3.0 reference are
+in one translation unit, so the 0-ULP comparison holds on any host, and each test runs
+host-mode through `test/run_gate_host.sh`. The x86/CUDA run with nvcc and the frozen
+flags is the definitive bit-for-bit environment; a module added between GPU windows is
+validated host-mode and runs on the x86/CUDA gate in the next window. Both sides exercise
+the same code, so a host-mode green and the x86/CUDA green agree.
+
 ## Host-mode validation
 
 The micro-tests are self-contained translation units whose subject and reference math

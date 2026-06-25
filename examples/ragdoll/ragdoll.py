@@ -23,10 +23,7 @@ def main():
     n_segments = 5
     seg_half_len = 0.4        # half-length of each segment along x
     seg_half_w = 0.1          # half-width
-    seg_len = 2 * seg_half_len
-
     batch = gb.Batch(n_worlds)
-    seg_slots = []
     for w in range(n_worlds):
         # a far-away ground edge so the chain swings freely
         batch.set_ground_edge(w, 0, -100.0, -100.0, 100.0, -100.0)
@@ -56,7 +53,7 @@ def main():
             slots.append(seg)
             prev = seg
             prev_right_x = cx + seg_half_len
-    seg_slots = slots   # world 0 layout (same in every world)
+    seg_slots = slots   # the body slot layout, the same in every world
 
     # record initial joint separations to confirm they hold
     def joint_gaps(positions):

@@ -50,6 +50,8 @@ Validated on an A10 (sm_86) with CUDA 12.8.
 
 Worlds with a large, densely packed connected island carry an irreducible per-substep float32 difference that stays within outcome spec. This is inherent to float32 in large connected islands and is the accepted standard for this class of engine. [docs/fidelity.md](docs/fidelity.md) explains it.
 
+**What batched bit-faithful physics buys downstream.** A specialized derivative of this engine (block-per-world, physics resident in shared memory, built for the fruit-merge RL project) keeps entire search trees on the GPU: snapshot, branch, settle, evaluate, and reduce without a host round-trip, expanding roughly 260K branch states per move. Making the physics cheap enough to search this deeply took a hand-crafted search agent from 22% to 79% success before any learning, and the same fidelity property proved load-bearing: dropping the settle from 60 to 20 substeps inside the tree collapses the same searcher to 7%, because physics error compounds across plies until the search values are meaningless. Fast batched physics is useful; fast *faithful* batched physics is what makes deep search work.
+
 ## Usage
 
 The physics core is header-only. The production build steps the whole batch with one kernel launch, one thread per world, on the SoA lane-equals-world backend:
